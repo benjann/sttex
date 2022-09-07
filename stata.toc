@@ -1,0 +1,2 @@
+v 3
+p sttex Stata module to integrate Stata results into a LaTeX document
