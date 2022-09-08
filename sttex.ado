@@ -1,4 +1,4 @@
-*! version 1.0.0  07sep2022  Ben Jann
+*! version 1.0.1  08sep2022  Ben Jann
 
 program sttex
     version 11
@@ -588,7 +588,7 @@ struct `PARTS' {
     `StrR'      id     // part ids
     `StrR'      pid    // id of parent part
     `BoolR'     run    // whether to run part
-    `IntR'      a      // starting position of part in do-file
+    `IntR'      l      // length (bytes) of part in do-file
 }
 
 // structure for Stata blocks
@@ -763,6 +763,7 @@ void Process()
     
     // process input file
     ParseSrc(M = Initialize(), ImportSrc(st_local("src"), strtoreal(st_local("StartAtLine"))))
+    M.P.l[M.P.j] = ftell(M.dof.fh) - M.P.l[M.P.j] // length of last part
     FClose(M.dof.fh, M.dof.id)
     FClose(M.tex.fh, M.tex.id)
 
@@ -772,10 +773,11 @@ void Process()
     // run do-file and collect log
     run = sum(M.P.run)
     if (run) {
-        // determine parts of dofile to be executed
-        if (run<M.P.j) {
+        // determine parts of dofile to be executed if not all (non-empty)
+        // parts need executioin
+        if (run!=sum(M.P.l:!=0)) {
             UpdateRunFlags(M.P)
-            RemovePartsFromDofile(M)
+            RemovePartsFromDofile(M, M.P.run, M.P.l, M.P.j)
         }
         // - working directory
         pwd = pwd()
@@ -853,11 +855,11 @@ void Process()
     st_local("lognm", M.lognm)
     
     // part setup
-    M.P.j = 1 
-    M.P.a = 0
+    M.P.j   = 1 
     M.P.id  = ""
     M.P.pid = "."
     M.P.run = `FALSE'
+    M.P.l   = 0
     
     // other
     M.s = M.g = M.i = 0 // counters
@@ -1206,11 +1208,14 @@ void ParseSrc(`Main' M, `Source' F)
 // main function
 void Part(`Main' M, `Str' s, `Source' F)
 {
+    `Int' p
     `Str' id, pid, tok, opts
     
-    M.s = M.g = M.i = 0 // reset counters
-    M.P.j   = M.P.j + 1
-    M.P.a   = M.P.a, ftell(M.dof.fh)
+    p = ftell(M.dof.fh)             // current position in dofile
+    M.P.l[M.P.j] = p - M.P.l[M.P.j] // length of previous part
+    M.s = M.g = M.i = 0             // reset counters
+    M.P.j = M.P.j + 1
+    M.P.l = M.P.l, p
     M.P.run = M.P.run, `FALSE'
     tokenset(M.t1, s)
     if ((tok=tokenget(M.t1))!="") {
@@ -1931,28 +1936,24 @@ void UpdateDwnstream(`StrR' id, `AsArray' A, `BoolR' dwn, `Int' j0)
     }
 }
 
-void RemovePartsFromDofile(`Main' M)
-{   // note: assumes M.P.j>1
-    `Int'  j, J, k, fh
-    `IntR' l
+void RemovePartsFromDofile(`Main' M, `BoolR' run, `IntR' l, `Int' J)
+{
+    `Int'  j, fh
     `StrC' S
     
     // read
-    J = M.P.j
-    fh = FOpen(M.dof.fn, "r")
-    fseek(fh, 0, 1) // move to end of file
-    l = (M.P.a[|2\J|], ftell(fh)) - M.P.a
-    fseek(fh, 0, -1) // move to beginning of file
-    k = 0
     S = J(J, 1, "")
+    fh = FOpen(M.dof.fn, "r")
     for (j=1; j<=J; j++) {
-        if (M.P.run[j]) S[++k] = fread(fh, l[j]) // read part
-        else            fseek(fh, l[j], 0)       // skip part
+        if (run[j]) S[j] = fread(fh, l[j])      // read part
+        else               fseek(fh, l[j], 0)   // skip part
     }
     FClose(fh)
     // write
     fh = FOpen(M.dof.fn, "w", "", 1)
-    for (j=1; j<=k; j++) fwrite(fh, S[j])
+    for (j=1; j<=J; j++) {
+        if (run[j]) fwrite(fh, S[j])
+    }
     FClose(fh, "")
 }
 

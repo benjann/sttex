@@ -24,5 +24,8 @@ Installation from GitHub:
 
 Main changes:
 
-08sep2022 (version 1.0.0)
-- released on GitHub
+    08sep2022 (version 1.0.0)
+    - minor change to how information on parts is managed
+    
+    08sep2022 (version 1.0.0)
+    - released on GitHub
