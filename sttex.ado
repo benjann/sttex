@@ -1,4 +1,4 @@
-*! version 1.0.1  08sep2022  Ben Jann
+*! version 1.0.2  10sep2022  Ben Jann
 
 program sttex
     version 11
@@ -17,7 +17,7 @@ program sttex
     if `"`subcmd'"'=="using" {
         gettoken subcmd 0 : 0   // strip using
     }
-    version `caller': Process `macval(0)'
+    version `caller': Process process `macval(0)'
 end
 
 program Register
@@ -56,12 +56,17 @@ program Register
 end
 
 program Extract
-    di "to be implemented"
+    _parse comma args opts: 0
+    gettoken tgt args : args
+    if `"`args'"'!="" error 198
+    Process extract `macval(0)'
 end
 
 program Process, rclass
     local caller : di _caller()
     // syntax
+    gettoken extract 0 : 0   // strip process/extract
+    if `"`extract'"'!="extract" local extract ""
     _parse comma args 0 : 0
     gettoken src args : args // source file
     mata: AddSuffixToSourcefile()
@@ -71,14 +76,22 @@ program Process, rclass
     local options0 `macval(options)'
     local StartAtLine 1
     nobreak {
+        if "`extract'"!="" local savingextract `"`saving'"'
+            // (ignore saving from %STinit in case of sttex extract)
         capt n break mata: GetInitFromSourcefile()  // parse %STinit
         mata: CloseOpenFHsAndExit(`=_rc')
+        if "`extract'"!="" local saving `"`savingextract'"'
     }
     local options1 `macval(options)'
     local typeset `typeset' `typeset2' `view' `view2' `jobname' `cleanup' ///
         `nobibtex' `bibtex' `nomakeindex' `makeindex'
     mata: PrepareFilenames()
     // run main routine
+    if "`extract'"!="" {
+        // extract stata code; do not maintain db, do not typeset
+        local nodb nodb
+        local typeset ""
+    }
     local pwd `"`c(pwd)'"'
     local cmore `"`c(more)'"'
     local crmsg `"`c(rmsg)'"'
@@ -90,7 +103,9 @@ program Process, rclass
         else            set rmsg on
         capt n break mata: Process()
         local rc = _rc
-        capt log close `lognm'
+        if `"`lognm'"'!="" {
+            capt log close `lognm'
+        }
         capt cd `pwd'
         capt set more `cmore'
         capt set rmsg `crmsg'
@@ -489,7 +504,8 @@ struct `MAIN' {
                 reset,    // eliminate preexisting database
                 nodb,     // do not keep database
                 update,   // whether database needs updating
-                dosave    // whether dosave option active for any Stata insert
+                dosave,   // whether dosave option active for any Stata insert
+                run       // whether to run sttey or only extract stata code
     `Int'       s,        // counter for Stata blocks
                 g,        // counter for graphs
                 i         // counter for Stata inline expressions
@@ -526,6 +542,7 @@ struct `FILE' {
 
 // structure for contents of input file
 struct `SOURCE' {
+    `Str'       fn  // file name
     `Int'       i,  // current line
                 i0, // first line of current parsing block
                 n   // number of lines
@@ -547,9 +564,10 @@ struct `TAG' {
                 stgraph,    // \stgraph{}
                 stres,      // \stres{}
                 endinput,   // \endinput
-                qui,        // //STqui
-                oom,        // //SToom
-                cnp         // //STcnp
+                ST,         // prefix of //ST-tags
+                qui,        // STqui
+                oom,        // SToom
+                cnp         // STcnp
     `StrC'      env         // keyword in \begin{}...\end{}
 }
 
@@ -568,8 +586,10 @@ struct `LTAG' {
                 G,    // Graph
                 I,    // Inline result start
                 Iend, // Inline result stop
+                ST,   // log prefix of //STtags
                 qui,  // STqui
-                oom   // SToom
+                oom,  // SToom
+                cnp   // STcnp
 }
 
 // weaving tags in LaTeX file
@@ -634,13 +654,13 @@ struct `SOPT' {
                 cnp         // indices of commands after which to insert \cnp
     `Str'       Begin,      // environment begin, default: \begin{stlog}
                 End,        // environment end, default: \end{stlog}
-                alert,      // enclose specified strings in \alert{}                // maybe alert, tag, subst should be StrR or so... !!!
-                tag,        // apply custom tags to specified strings
-                subst,      // apply specified substitutions 
                 logdir,     // path of log file
                 logdir0,    // include path for log file
                 dodir,      // path of do file
                 dodir0      // include path for do file
+    `StrR'      alert       // enclose specified strings in \alert{}
+    `StrM'      tag,        // apply custom tags to specified strings
+                subst       // apply specified substitutions 
 }
 
 // structure for graphs
@@ -723,6 +743,7 @@ void GetInitFromSourcefile()
 // prepare file names
 void PrepareFilenames()
 {
+    `Str' suf
     `Str' src                     // path and name of source file
     `Str' srcdir; `Unset' srcdir  // path of source file (without name)
     `Str' srcnm;  `Unset' srcnm   // name of source file (without path)
@@ -734,9 +755,10 @@ void PrepareFilenames()
     src = st_local("src")
     pathsplit(src, srcdir, srcnm)
     // target file
+    suf = st_local("extract")!="" ? ".do" : ".tex"
     tgt = st_local("saving")
-    if (tgt=="")                  tgt = pathrmsuffix(srcnm) + ".tex"
-    else if (pathsuffix(tgt)=="") tgt = tgt + ".tex"
+    if (tgt=="")                  tgt = pathrmsuffix(srcnm) + suf
+    else if (pathsuffix(tgt)=="") tgt = tgt + suf
     if (!pathisabs(tgt)) tgt = pathjoin(srcdir, tgt)
     if (src==tgt) {
         display("{err}target file can not be the same as the source file")
@@ -762,10 +784,19 @@ void Process()
     `Main' M
     
     // process input file
-    ParseSrc(M = Initialize(), ImportSrc(st_local("src"), strtoreal(st_local("StartAtLine"))))
-    M.P.l[M.P.j] = ftell(M.dof.fh) - M.P.l[M.P.j] // length of last part
-    FClose(M.dof.fh, M.dof.id)
-    FClose(M.tex.fh, M.tex.id)
+    ParseSrc(M = Initialize(),
+        ImportSrc(st_local("src"), strtoreal(st_local("StartAtLine"))))
+    
+    // extract stata code
+    if (!M.run) {
+        Extract_code(M)
+        return // done
+    }
+    else {
+        M.P.l[M.P.j] = ftell(M.dof.fh) - M.P.l[M.P.j] // length of last part
+        FClose(M.dof.fh, M.dof.id)
+        FClose(M.tex.fh, M.tex.id)
+    }
 
     // remove old keys
     if (!M.nodb & !M.reset) DeleteOldKeys(M)
@@ -845,14 +876,17 @@ void Process()
     M.replace = (st_local("replace")!="")
     Fexists(M.tgt.fn, M.replace)
     
-    // temporary do-file and tex-file
-    M.dof.fh = FOpen(M.dof.fn = st_tempfilename(), "rw", M.dof.id = "dof")
-    M.tex.fh = FOpen(M.tex.fn = st_tempfilename(), "w" , M.tex.id = "tex")
+    // Whether to run sttey or just extract stata code
+    M.run = st_local("extract")!="extract"
     
-    // main log file
-    M.log.fn = st_tempfilename()
-    M.lognm  = st_tempname() //"stTeX_log"
-    st_local("lognm", M.lognm)
+    // temporary do-file and tex-file; main log file
+    if (M.run) {
+        M.dof.fh = FOpen(M.dof.fn = st_tempfilename(), "rw", M.dof.id = "dof")
+        M.tex.fh = FOpen(M.tex.fn = st_tempfilename(), "w" , M.tex.id = "tex")
+        M.log.fn = st_tempfilename()
+        M.lognm  = st_tempname()
+        st_local("lognm", M.lognm)
+    }
     
     // part setup
     M.P.j   = 1 
@@ -876,7 +910,7 @@ void Process()
     hasgrdir  = (st_local("gr_hasdir")!="")
     
     // Stata block options and graph options specified with %STinit
-    _collect_stlog_options(M, M.Sopt, st_local("options1"), `SOURCE'())
+    _collect_stlog_options(M, M.Sopt, st_local("options1"), `SOURCE'(), 1)
     if (!haslogdir & st_local("haslogdir")=="") {
         M.Sopt.logdir  = pathrmsuffix(M.tgt.fn)
         M.Sopt.logdir0 = pathrmsuffix(pathbasename(M.tgt.fn))
@@ -886,7 +920,7 @@ void Process()
         M.Sopt.dodir0 = M.Sopt.logdir0
     }
     if (M.Sopt.nodo==`TRUE') M.P.run[M.P.j] = 0   // forced nodo
-    _collect_graph_options(M, M.Gopt, st_local("options"), `SOURCE'())
+    _collect_graph_options(M, M.Gopt, st_local("options"), `SOURCE'(), 1)
     if (!hasgrdir & st_local("gr_hasdir")=="") {
         M.Gopt.dir  = M.Sopt.logdir
         M.Gopt.dir0 = M.Sopt.logdir0
@@ -906,9 +940,10 @@ void Process()
     M.tag.stgraph   = M.tag.cs + "stgraph"
     M.tag.stres     = M.tag.cs + "stres"
     M.tag.endinput  = M.tag.cs + "endinput"
-    M.tag.qui       = "//STqui"
-    M.tag.oom       = "//SToom"
-    M.tag.cnp       = "//STcnp"
+    M.tag.ST        = "//ST"
+    M.tag.qui       = M.tag.ST + "qui"
+    M.tag.oom       = M.tag.ST + "oom"
+    M.tag.cnp       = M.tag.ST + "cnp"
     M.tag.env       = ("stata", "stata*", "mata", "mata*")'
     
     // inline expression tags
@@ -923,8 +958,10 @@ void Process()
     M.Ltag.G    = "//stTeX// --> stgraph:"
     M.Ltag.I    = "//stTeX// --> inline expression start:"
     M.Ltag.Iend = "//stTeX// --> inline expression stop"
-    M.Ltag.qui  = "/*STqui -->*/ quietly ///"
-    M.Ltag.oom  = "/*SToom -->*/ quietly ///"
+    M.Ltag.ST   = "/*ST"
+    M.Ltag.qui  = M.Ltag.ST + "qui -->*/ quietly ///"
+    M.Ltag.oom  = M.Ltag.ST + "oom -->*/ quietly ///"
+    M.Ltag.cnp  = M.Ltag.ST + "cnp -->*/"
 
     // weaving tags in LaTeX file
     M.Ttag.S    = "%%stTeX-stlog:"
@@ -956,16 +993,6 @@ void Process()
     M.reset = (st_local("reset")!="")
     M.nodb  = (st_local("nodb")!="")
     if (!M.nodb) {
-        /*
-        if (M.db.fn==st_local("src")) {
-            display("{err}database file can not be the same as the source file")
-            exit(602)
-        }
-        if (M.db.fn==M.tgt.fn) {
-            display("{err}database file can not be the same as the target file")
-            exit(602)
-        }
-        */
         Fexists(M.db.fn, M.replace)
     }
     if (!DatabaseRead(M)) {
@@ -977,7 +1004,8 @@ void Process()
 }
 
 // collect stlog options
-void _collect_stlog_options(`Main' M, `Sopt' O, `Str' opts, `Source' F)
+void _collect_stlog_options(`Main' M, `Sopt' O, `Str' opts, `Source' F,
+    | `Bool' init)
 {
     `Bool' rc
     
@@ -989,7 +1017,8 @@ void _collect_stlog_options(`Main' M, `Sopt' O, `Str' opts, `Source' F)
     // run Stata parser
     rc = _stata("_collect_stlog_options, " + opts)
     if (rc) {
-        if (F.i0<.) ErrorLines(F)
+        if (init==1)     display("{err}error in %STinit")
+        else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
     // collect on/off options (1 = on, 0 = off, . = not specified)
@@ -1021,9 +1050,11 @@ void _collect_stlog_options(`Main' M, `Sopt' O, `Str' opts, `Source' F)
     // string options ("" if not specified)
     if (st_local("begin2")!="")     O.Begin = st_local("begin2")
     if (st_local("end2")!="")       O.End   = st_local("end2")
-    if (st_local("alert")!="")      O.alert = st_local("alert")
-    if (st_local("tag")!="")        O.tag   = st_local("tag")
-    if (st_local("substitute")!="") O.subst = st_local("substitute")
+    // multivalues string options (J(1,0,"") if not specified)
+    if (st_local("alert")!="")      O.alert = tokens(st_local("alert"))
+    // dictionary string options (J(0,0,"") if not specified)
+    if (st_local("tag")!="")        O.tag   = _parse_tag_option(F, init)
+    if (st_local("substitute")!="") O.subst = _parse_subst_option(F, init)
     // logdir
     if (st_local("haslogdir")!="") {
         O.logdir0 = st_local("logdir")
@@ -1040,25 +1071,9 @@ void _collect_stlog_options(`Main' M, `Sopt' O, `Str' opts, `Source' F)
     if (O.nodo==`FALSE') M.P.run[M.P.j] = `TRUE'
 }
 
-// collect on/off option
-void _collect_onoff_option(`Str' opt, `Bool' o, | `Str' prefix)
-{
-    `Str' s
-    
-    if (substr(opt,1,2)=="no") {
-        opt = substr(opt,3,.)
-        s = st_local(prefix + opt)
-        if (s==("no"+opt))  o = `TRUE'
-        else if (s==opt)    o = `FALSE'
-        return
-    }
-    s = st_local(prefix + opt)
-    if (s==opt)             o = `TRUE'
-    else if (s==("no"+opt)) o = `FALSE'
-}
-
 // collect graph options
-void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F)
+void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F,
+    | `Bool' init)
 {
     `Bool' rc
     
@@ -1066,7 +1081,8 @@ void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F)
     if (opts=="") return
     rc = _stata("_collect_graph_options, " + opts)
     if (rc) {
-        if (F.i0<.) ErrorLines(F)
+        if (init==1)     display("{err}error in %STinit")
+        else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
     // collect on/off options (1 = on, 0 = off, . = not specified)
@@ -1086,6 +1102,139 @@ void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F)
         if (pathisabs(O.dir0)) O.dir = O.dir0
         else O.dir = pathjoin(M.tgtdir, O.dir0)
     }
+}
+
+// collect on/off option
+void _collect_onoff_option(`Str' opt, `Bool' o, | `Str' prefix)
+{
+    `Str' s
+    
+    if (substr(opt,1,2)=="no") {
+        opt = substr(opt,3,.)
+        s = st_local(prefix + opt)
+        if (s==("no"+opt))  o = `TRUE'
+        else if (s==opt)    o = `FALSE'
+        return
+    }
+    s = st_local(prefix + opt)
+    if (s==opt)             o = `TRUE'
+    else if (s==("no"+opt)) o = `FALSE'
+}
+
+// expand tag() option into a matrix with one specification per row:
+//   <target> <left tag> <right tag>
+`StrM' _parse_tag_option(`Source' F, | `Bool' init)
+{
+    `Int'    i, i0, j, l, k
+    `Str'    left, right
+    `StrR'   S
+    `StrM'   dict
+    `TokEnv' t
+    
+    S = st_local("tag")
+    t = tokeninit()
+    tokenpchars(t, "=")
+    tokenset(t, S)
+    S = tokengetall(t)
+    l = length(S)
+    dict = J(l, 3, "")
+    k = 0
+    i0 = 1
+    for (j=1;j<=l;j++) {
+        if (S[j]=="=") {
+            if (j==i0) {
+                display("{err}invalid specification of tag() option")
+                if (init==1) display("{err}error in %STinit")
+                else if (F.i0<.) ErrorLines(F)
+                exit(198)
+            }
+            if ((j+1)>l) left = ""
+            else {
+                left = S[j+1]
+                if (left=="=") {
+                    display("{err}invalid specification of tag() option")
+                    if (init==1) display("{err}error in %STinit")
+                    else if (F.i0<.) ErrorLines(F)
+                    exit(198)
+                }
+                left = _parse_stripquotes(left)
+            }
+            if ((j+2)>l) right = ""
+            else {
+                right = S[j+2]
+                if (right=="=") {
+                    display("{err}invalid specification of tag() option")
+                    if (init==1) display("{err}error in %STinit")
+                    else if (F.i0<.) ErrorLines(F)
+                    exit(198)
+                }
+                right = _parse_stripquotes(right)
+            }
+            for (i=i0; i<=(j-1); i++) {
+                dict[++k,] = _parse_stripquotes(S[i]), left, right
+            }
+            j = j + 2
+            i0 = j + 1
+        }
+    }
+    if (k) dict = dict[|1,1 \ k,.|]
+    return(dict)
+}
+
+`Str' _parse_stripquotes(`Str' s)
+{
+    if      (substr(s, 1, 1)==`"""')       s = substr(s, 2, strlen(s)-2)
+    else if (substr(s, 1, 2)=="`" + `"""') s = substr(s, 3, strlen(s)-4)
+    return(s)
+}
+
+// expand substituts() option into a matrix with one specification per row:
+//   <from> <to>
+`StrM' _parse_subst_option(`Source' F, | `Bool' init)
+{
+    `Int'    i, i0, j, l, k
+    `Str'    to
+    `StrR'   S
+    `StrM'   dict
+    `TokEnv' t
+    
+    S = st_local("substitute")
+    t = tokeninit()
+    tokenpchars(t, "=")
+    tokenset(t, S)
+    S = tokengetall(t)
+    l = length(S)
+    dict = J(l, 2, "")
+    k = 0
+    i0 = 1
+    for (j=1;j<=l;j++) {
+        if (S[j]=="=") {
+            if (j==i0) {
+                display("{err}invalid specification of substitute() option")
+                if (init==1) display("{err}error in %STinit")
+                else if (F.i0<.) ErrorLines(F)
+                exit(198)
+            }
+            if ((j+1)>l) to = ""
+            else {
+                to = S[j+1]
+                if (to=="=") {
+                    display("{err}invalid specification of substitute() option")
+                    if (init==1) display("{err}error in %STinit")
+                    else if (F.i0<.) ErrorLines(F)
+                    exit(198)
+                }
+                to = _parse_stripquotes(to)
+            }
+            for (i=i0; i<=(j-1); i++) {
+                dict[++k,] = _parse_stripquotes(S[i]), to
+            }
+            j = j + 1
+            i0 = j + 1
+        }
+    }
+    if (k) dict = dict[|1,1 \ k,.|]
+    return(dict)
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1153,9 +1302,10 @@ void DatabaseDelete(`Main' M)
 {
     `Source' F
 
-    F.S = Cat(fn)
+    F.fn = fn
+    F.S = Cat(F.fn)
     F.i = i
-    F.n = rows(F.S) 
+    F.n = rows(F.S)
     return(F)
 }
 
@@ -1211,11 +1361,13 @@ void Part(`Main' M, `Str' s, `Source' F)
     `Int' p
     `Str' id, pid, tok, opts
     
-    p = ftell(M.dof.fh)             // current position in dofile
-    M.P.l[M.P.j] = p - M.P.l[M.P.j] // length of previous part
+    if (M.run) {
+        p = ftell(M.dof.fh)             // current position in dofile
+        M.P.l[M.P.j] = p - M.P.l[M.P.j] // length of previous part
+        M.P.l = M.P.l, p
+    }
     M.s = M.g = M.i = 0             // reset counters
     M.P.j = M.P.j + 1
-    M.P.l = M.P.l, p
     M.P.run = M.P.run, `FALSE'
     tokenset(M.t1, s)
     if ((tok=tokenget(M.t1))!="") {
@@ -1313,7 +1465,7 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
         if (rc = Parse_S_End(M, F, tag)) break
     }
     if (rc!=1) {
-        printf("{err}line %g: %s\n", F.i0, F.S[F.i0])
+        printf("{err}line %g in %s: %s\n", F.i0, F.fn, F.S[F.i0])
         if (rc==0)  printf("{err}end not found\n")
         else        printf("{err}ended on line %g with: %s\n", F.i, F.S[F.i])
         exit(499)
@@ -1323,7 +1475,7 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
     // - get rid of indentation
     if (O.notrim!=`TRUE') trim = Parse_S_trim(M, C, O.trim)
     // prepare do-file
-    if (O.nodo!=`TRUE') {
+    if (M.run & O.nodo!=`TRUE') {
         // - set line size and output mode
         if (O.code!=`TRUE') {
             if (O.linesize<.) {
@@ -1334,7 +1486,7 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
         }
         // - start mata if needed
         if (O.mata==`TRUE') {
-            //fput(M.dof.fh, "#delimit cr")                                           // ???
+            //fput(M.dof.fh, "#delimit cr")                                     // ???
             fput(M.dof.fh, "mata:")
         }
         // - start insert
@@ -1346,7 +1498,7 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
         // - end mata if needed
         if (O.mata==`TRUE') {
             fput(M.dof.fh, "end")
-            //fput(M.dof.fh, "#delimit ;")                                          // ???
+            //fput(M.dof.fh, "#delimit ;")                                      // ???
         }
         // - restore line size and output mode
         if (O.code!=`TRUE') {
@@ -1355,11 +1507,11 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
         }
     }
     // write tags to LaTeX file
-    if (O.quietly!=`TRUE') 
+    if (M.run & O.quietly!=`TRUE') 
         fput(M.tex.fh, M.Ttag.S + id + M.Ttag.Send)
     // update database
     Parse_S_store(M, id, O, C, trim)
-    M.Skeys = M.Skeys \ id                                                      // make more efficient?
+    M.Skeys = M.Skeys \ id
     M.lastS = id
 }
 
@@ -1377,6 +1529,10 @@ void _Parse_S(`Main' M, `Source' F, `Str' id, `Sopt' O, `Str' tag)
     }
     if (s==M.tag.oom) {
         F.S[F.i] = substr(F.S[F.i], 1, strpos(F.S[F.i], M.tag.oom)-1) + M.Ltag.oom
+        return(0)
+    }
+    if (s==M.tag.cnp) {
+        F.S[F.i] = substr(F.S[F.i], 1, strpos(F.S[F.i], M.tag.oom)-1) + M.Ltag.cnp
         return(0)
     }
     if (s==M.tag.End) {
@@ -1489,6 +1645,7 @@ void Parse_S_store(`Main' M, `Str' id, `Sopt' O, `StrC' C, `Int' trim)
     `Bool' rc; `Unset' rc
     `Str'  id, opts
     
+    if (!M.run) return(`TRUE')
     F.i0 = F.i
     id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     if (id!="") {
@@ -1544,7 +1701,7 @@ void _Parse_G(`Main' M, `Source' F, `Str' id, `Str' opts)
         fput(M.tex.fh, M.Ttag.G + id + M.Ttag.Gend)
     // update database
     Parse_G_store(M, id, O, fn, nodo)
-    M.Gkeys = M.Gkeys \ id                                                      // make more efficient?
+    M.Gkeys = M.Gkeys \ id
     M.lastG = id
 }
 
@@ -1635,6 +1792,7 @@ void Parse_I(`Main' M, `Source' F)
     `Int' p
     `Str' s
     
+    if (!M.run) return
     if (!(p = Parse_I_find(M, F.S[F.i]))) {
         fput(M.tex.fh, F.S[F.i])
         return
@@ -1692,8 +1850,8 @@ void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
         ErrorLines(F)
         exit(499)
     }
-    // prepare do-file                                                          // should this also depend on S->O.nodo from last insert?
-    if (M.Sopt.nodo!=`TRUE') {
+    // prepare do-file
+    if (M.Sopt.nodo!=`TRUE') {          // should also depend on last S->O.nodo?
         fput(M.dof.fh, M.Ltag.I + id)
         fput(M.dof.fh, "display " + exp)
         fput(M.dof.fh, M.Ltag.Iend)
@@ -1702,7 +1860,7 @@ void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
     fwrite(M.tex.fh, M.Ttag.I + id + M.Ttag.Iend)
     // update database
     Parse_I_store(M, id, exp)
-    M.Ikeys = M.Ikeys \ id                                                      // make more efficient?
+    M.Ikeys = M.Ikeys \ id
 }
 
 void Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
@@ -1758,7 +1916,8 @@ void Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
     return(.)
 }
 
-// update info on Stata inline expression in database and determine whether code needs to be run
+// update info on Stata inline expression in database and determine whether code
+// needs to be run
 void Parse_I_store(`Main' M, `Str' id, `Str' exp)
 {
     `pInline' I
@@ -2207,7 +2366,7 @@ void Striplog(`Main' M, `Stata' S, `StrC' f)
     for (i=1; i<=r; i++) {
         s = strltrim(substr(f[i],3,.)) // strip prompt
         // handle STcnp
-        if (s==M.tag.cnp) {
+        if (s==M.Ltag.cnp) {
             if (i<r) f[i+1] = substr(f[i],1,2) + substr(f[i+1],3,.) // copy prompt
             f[i] = "\cnp"
             continue
@@ -2245,7 +2404,7 @@ void Striplog(`Main' M, `Stata' S, `StrC' f)
             }
         }
         // update mata status
-        s = strtrim(s)                                                          // needed?
+        s = strtrim(s)                                                // needed?
         if (!inmata) {
             if (substr(s,1,4)=="mata") { // "mata", "mata:", or "mata<blanks>:"
                 s = substr(s,5,.)
@@ -2280,6 +2439,7 @@ void Striplog(`Main' M, `Stata' S, `StrC' f)
     if (length(S.O.cnp))  Striplog_edit(S.O.cnp,  f, p, idx, 4)
     // select relevant output and apply alert() and tag()
     f = select(f, p)
+    Striplog_subst(f, S.O.subst)
     Striplog_alert(f, S.O.alert)
     Striplog_tag(f, S.O.tag)
 }
@@ -2361,53 +2521,40 @@ void Striplog_insertrows(`StrC' f, `BoolC' p, `Int' i, `Int' n)
     }
 }
 
-// add \alert{} to specified tokens
-void Striplog_alert(`StrC' f, `Str' alert)
+// apply substitutions 
+void Striplog_subst(`StrC' f, `StrM' subst)
 {
-    `Int' i
+    `Int' i, k
     
-    if (alert=="") return
-    alert = tokens(alert)
-    for (i=1; i<=length(alert); i++) {
+    k = rows(subst)
+    if (!k) return
+    for (i=1; i<=k; i++) {
+        f = subinstr(f, subst[i,1], subst[i,2])
+    }
+}
+
+// add \alert{} to specified tokens
+void Striplog_alert(`StrC' f, `StrR' alert)
+{
+    `Int' i, k
+    
+    k = length(alert)
+    if (!k) return
+    for (i=1; i<=k; i++) {
         f = subinstr(f, alert[i], "\alert{" + alert[i] + "}")
     }
 }
 
-// add tags to specified tokens; last two tokens are the start and end tags
-void Striplog_tag(`StrC' f, `Str' tag)
+// add tags to specified tokens
+void Striplog_tag(`StrC' f, `StrM' tag)
 {
-    `Int'    i, i0, j, l
-    `Str'    start, stop, s
-    `TokEnv' t
+    `Int' i, k
     
-    if (tag=="") return
-    t = tokeninit()
-    tokenpchars(t,"=")
-    tokenset(t, tag)
-    tag = tokengetall(t)
-    l = length(tag)
-    i0 = 1
-    for (j=1; j<=l; j++) {
-        if (tag[j]=="=") {
-            if (j==i0) continue // first element in list is "="
-            if ((j+1)>l) start = ""
-            else         start = Striplog_tag_noquotes(tag[j+1])
-            if ((j+2)>l) stop  = ""
-            else         stop  = Striplog_tag_noquotes(tag[j+2])
-            for (i=i0; i<=(j-1); i++) {
-                s = Striplog_tag_noquotes(tag[i])
-                f = subinstr(f, s, start + s + stop)
-            }
-            j = j + 2
-            i0 = j + 1
-        }
+    k = rows(tag)
+    if (!k) return
+    for (i=1; i<=k; i++) {
+        f = subinstr(f, tag[i,1], tag[i,2] + tag[i,1] + tag[i,3])
     }
-}
-`Str' Striplog_tag_noquotes(`Str' s)
-{
-    if      (substr(s, 1, 1)==`"""')       s = substr(s, 2, strlen(s)-2)
-    else if (substr(s, 1, 2)=="`" + `"""') s = substr(s, 3, strlen(s)-4)
-    return(s)
 }
 
 // read command in log and optionally strip line break comments
@@ -2650,9 +2797,12 @@ void Weave_S(`Main' M, `Str' s, `Int' a)
     S = asarray(M.S, id)
     if (S->O.nobegin!=`TRUE') {
         if (S->O.Begin=="") {
-            if (S->O.code==`TRUE' & S->O.verb==`TRUE') fwrite(M.tgt.fh, "\begin{stverbatim}")
-            else if (S->O.beamer==`TRUE')              fwrite(M.tgt.fh, "\begin{stlog}[beamer]")
-            else                                       fwrite(M.tgt.fh, "\begin{stlog}")
+            if (S->O.code==`TRUE' & S->O.verb==`TRUE')
+                fwrite(M.tgt.fh, "\begin{stverbatim}")
+            else if (S->O.beamer==`TRUE')
+                fwrite(M.tgt.fh, "\begin{stlog}[beamer]")
+            else
+                fwrite(M.tgt.fh, "\begin{stlog}")
         }
         else fwrite(M.tgt.fh, S->O.Begin)
         if (S->O.statc==`TRUE') fput(M.tgt.fh, "")
@@ -2664,8 +2814,10 @@ void Weave_S(`Main' M, `Str' s, `Int' a)
         S->save = `TRUE' // need to save log on disc
     }
     else {
-        if (S->O.code==`TRUE'&S->O.verb==`TRUE') fput(M.tgt.fh, "\begin{verbatim}") 
-        _Fput(M.tgt.fh, (S->tex!=NULL ? *S->tex : ("(error: log not available)")), 1)
+        if (S->O.code==`TRUE'&S->O.verb==`TRUE')
+            fput(M.tgt.fh, "\begin{verbatim}") 
+        _Fput(M.tgt.fh, (S->tex!=NULL ? *S->tex :
+            ("(error: log not available)")), 1)
         if (S->O.code==`TRUE'&S->O.verb==`TRUE') {
             fput(M.tgt.fh, "")
             fwrite(M.tgt.fh, "\end{verbatim}")
@@ -2674,9 +2826,12 @@ void Weave_S(`Main' M, `Str' s, `Int' a)
     if (S->O.noend!=`TRUE') {
         if (S->O.statc==`TRUE') fput(M.tgt.fh, "")
         if (S->O.End=="") {
-            if (S->O.code==`TRUE' & S->O.verb==`TRUE') fwrite(M.tgt.fh, "\end{stverbatim}")
-            else if (S->O.beamer==`TRUE')              fwrite(M.tgt.fh, "\end{stlog}")
-            else                                       fwrite(M.tgt.fh, "\end{stlog}")
+            if (S->O.code==`TRUE' & S->O.verb==`TRUE')
+                fwrite(M.tgt.fh, "\end{stverbatim}")
+            else if (S->O.beamer==`TRUE')
+                fwrite(M.tgt.fh, "\end{stlog}")
+            else
+                fwrite(M.tgt.fh, "\end{stlog}")
         }
         else fwrite(M.tgt.fh, S->O.End)
     }
@@ -2822,8 +2977,51 @@ void External_dofiles(`Main' M)
             if (fileexists(fn)) continue
         }
         if (!direxists(S->O.dodir)) mkdir(S->O.dodir)
-        Fput(fn, *S->cmd)                                  // also need to apply some stripping (//SToom etc.)
+        Fput(fn, Get_cmd(M, *S))
     }
+}
+
+`StrC' Get_cmd(`Main' M, `Stata' S)
+{
+    `Int'  i
+    `IntC' p
+    `Str'  c
+    `StrC' cmd
+    
+    cmd = *S.cmd
+    if (any(strpos(cmd, M.Ltag.ST))) {
+        i = rows(cmd)
+        p = J(i,1,1)
+        for (; i; i--) {
+            c = TabTrim(cmd[i])
+            if      (c==M.Ltag.qui) p[i] = 0
+            else if (c==M.Ltag.oom) p[i] = 0
+            else if (c==M.Ltag.cnp) p[i] = 0
+        }
+        cmd = select(cmd, p)
+    }
+    if (S.O.mata==`TRUE') cmd = "mata:" \ cmd \ "end"
+    return(cmd)
+}
+
+/*---------------------------------------------------------------------------*/
+/* extract stata code                                                        */
+/*---------------------------------------------------------------------------*/
+
+void Extract_code(`Main' M)
+{
+    `Int'    i, n
+    `pStata' S
+    
+    M.tgt.fh = FOpen(M.tgt.fn, "w", M.tgt.id, 1)
+    n = length(M.Skeys)
+    for (i=1;i<=n;i++) {
+        if (i>1) fput(M.tgt.fh, "") // empty line
+        S = asarray(M.S, M.Skeys[i])
+        fput(M.tgt.fh, "// " + M.Skeys[i])
+        _Fput(M.tgt.fh, Get_cmd(M, *S))
+    }
+    FClose(M.tgt.fh, M.tgt.id)
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2895,9 +3093,11 @@ void ErrorLines(`Source' F)
 {
     `Int' i
     
-    if (F.i0==F.i) printf("{err}error on line %g: %s\n", F.i, F.S[F.i0])
+    if (F.i0==F.i) {
+        printf("{err}error on line %g in %s:\n    %s\n", F.i, F.fn, F.S[F.i0])
+    }
     else {
-        printf("{err}error on lines %g-%g:\n", F.i0, F.i)
+        printf("{err}error on lines %g-%g in %s:\n", F.i0, F.i, F.fn)
         for (i=F.i0; i<=F.i; i++) printf("{err}    %s\n", F.S[i])
     }
 }
@@ -3033,7 +3233,7 @@ void Get_Path(`Str' fn)
 
 // open file and record file handle in local macro; also update local macro
 // containing list of local macros containing file handles
-real scalar FOpen(`Str' fn, `Str' mode, | `Str' id, `Bool' unlink)
+`Int' FOpen(`Str' fn, `Str' mode, | `Str' id, `Bool' unlink)
 {
     `Int'  fh
     `Str'  lname
@@ -3041,7 +3241,7 @@ real scalar FOpen(`Str' fn, `Str' mode, | `Str' id, `Bool' unlink)
     
     lname = "MataFH" + (id!="" ? "_" + id : "")
     lnames = tokens(st_local("MataFHs"))
-    if (unlink==1) _FOpen(fn, fh, mode)
+    if (unlink==1) fh = _FOpen(fn, mode)
     else           fh = fopen(fn, mode)
     st_local(lname, strofreal(fh))
     if (length(Complement(lname, lnames))) {
@@ -3055,9 +3255,9 @@ real scalar FOpen(`Str' fn, `Str' mode, | `Str' id, `Bool' unlink)
 // that, on Windows, fopen() may fail if applied directly after unlink() 
 // (usually caused by a virus scanner); the function below retries
 // to open the file until a maximum delay of 100 milliseconds
-void _FOpen(`Str' fn, `Int' fh, `Str' mode)
+`Int' _FOpen(`Str' fn,  `Str' mode)
 {
-    `Int' cnt
+    `Int' fh, cnt
 
     if (fileexists(fn)) {
         unlink(fn)
@@ -3068,9 +3268,9 @@ void _FOpen(`Str' fn, `Int' fh, `Str' mode)
             }
             stata("sleep 10")
         }
-        return
+        return(fh)
     }
-    fh = fopen(fn, mode)
+    return(fopen(fn, mode))
 }
 
 // close file and remove local macro containing file handle; also update local 

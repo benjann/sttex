@@ -1,5 +1,5 @@
 {smcl}
-{* 07sep2022}{...}
+{* 10sep2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -36,6 +36,15 @@
     suffix. {it:srcfile} may contain an absolute or relative path.
 
 {pstd}
+    Extract Stata code from source file:
+
+{p 8 15 2}
+    {cmd:sttex extract} {it:srcfile} 
+    [{cmd:,}
+    {opt sav:ing(tgtfile)} {opt r:eplace}
+    ]
+
+{pstd}
     Register the location of LaTeX executables:
 
 {p 8 15 2}
@@ -50,7 +59,9 @@
     used if {it:tgtfile} is specified without suffix; {it:srcname}{cmd:.tex} is used
     if {cmd:saving()} is omitted, where {it:srcname} is the base name of {it:srcfile}; the
     target file will be placed in the same folder as the source file unless an (absolute or relative)
-    path is specified in {it:tgtfile}
+    path is specified in {it:tgtfile}; for {cmd:sttex extract}, option {cmd:saving()}
+    specified the target dofile to store the Stata commands; default suffix is {cmd:.do}
+    in this case
     {p_end}
 {synopt :{opt r:eplace}}allow overwriting existing files
     {p_end}
@@ -250,7 +261,7 @@ output-omitted message; {it:numlist} is as for {cmd:drop()}
     executed; see {help sttex##parts:Partition the file into sections} below.
 
 {pstd}
-    Typesetting options require
+    Typesetting options of {cmd:sttex} require
     a LaTeX distribution to be installed on your computer. Use
     {cmd:sttex register tex} {it:path} to inform {cmd:sttex} about the location
     of LaTeX executables such as {cmd:pdflatex}, {cmd:makeindex}, and
@@ -266,6 +277,10 @@ output-omitted message; {it:numlist} is as for {cmd:drop()}
     as {cmd:sttex} remembers the setting between Stata sessions (the setting will
     be stored in a file added to the folder in which {cmd:sttex.ado} resides). To
     delete the setting, type {cmd:sttex register tex} without argument.
+
+{pstd}
+    {cmd:sttex extract} is a utility command that can be used to collect all blocks
+    of Stata code from a source file and store them in a do-file.
 
 {pstd}
     {cmd:sttex} requires Stata 11 or newer.
