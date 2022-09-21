@@ -1,4 +1,4 @@
-*! version 1.0.2  20sep2022  Ben Jann
+*! version 1.1.0  21sep2022  Ben Jann
 
 program sttex
     version 11
@@ -223,7 +223,8 @@ program _collect_log_options
         CLsize(numlist int max=1 >=40 <=255) ////
         BEGIN2(str asis) ///
         END2(str asis) ///
-        scale(numlist max=1 >0 missingok) ]
+        scale(numlist max=1 >0 missingok) ///
+        BLstretch(numlist max=1 missingok) ]
     if "`range'"!="" {
         gettoken from : range
         if `from'>=. {
@@ -257,6 +258,7 @@ program _collect_log_options
     c_local begin2     `"`macval(begin2)'"'
     c_local end2       `"`macval(end2)'"'
     c_local scale      `scale'
+    c_local blstretch  `blstretch'
 end
 
 program _collect_graph_options
@@ -741,7 +743,8 @@ struct `LOPT' {
                 logdir,     // path of log file
                 logdir0     // include path for log file
     `Int'       clsize      // linesize for (non-verbatim) code log
-    `Real'      scale       // rescaling factor
+    `Real'      scale,      // rescaling factor
+                blstretch   // line spacing
 }
 
 // structure for graphs
@@ -1163,8 +1166,9 @@ void _collect_log_options(`Main' M, `Lopt' O, `Str' opts, `Source' F,
     _collect_onoff_option("noend"     , O.noend)
     _collect_onoff_option("beamer"    , O.beamer)
     // scalar options (. if not specified)
-    if (st_local("scale")!="")  O.scale = strtoreal(st_local("scale"))
-    if (st_local("clsize")!="") O.clsize = strtoreal(st_local("clsize"))
+    if (st_local("clsize")!="")     O.clsize = strtoreal(st_local("clsize"))
+    if (st_local("scale")!="")      O.scale = strtoreal(st_local("scale"))
+    if (st_local("blstretch")!="")  O.blstretch = strtoreal(st_local("blstretch"))
     // multivalued numeric option (J(1,0,.) if not specified)
     if (st_local("range")!="") O.range = strtoreal(tokens(st_local("range")))
     if (st_local("drop")!="")  O.drop  = strtoreal(tokens(st_local("drop")))
@@ -1801,10 +1805,11 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
         if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
         M.update = `TRUE'
         C = &(`CODE'())
-        C->cmd = &S
         C->newcmd = `TRUE'
-        C->O = O
+        C->mata = mata
         C->trim = trim
+        C->O = O
+        C->cmd = &S
         asarray(M.C, id, C)
         return
     }
@@ -1827,20 +1832,21 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     else if (C->mata!=mata) {
         C->mata = mata; M.update = `TRUE';                      chflag = `TRUE'
     }
-    // - other changes that require rerunning the code
-    else if ((C->O.nooutput==`TRUE')!=(O.nooutput==`TRUE'))     chflag = `TRUE'
-    else if  (C->O.linesize!=O.linesize)                        chflag = `TRUE'
+    // - other changes that require rerunning the code or updating the db
+    if (C->O!=O) {
+        if (!chflag) {
+            if ((C->O.nooutput==`TRUE')!=(O.nooutput==`TRUE'))  chflag = `TRUE'
+            else if  (C->O.linesize!=O.linesize)                chflag = `TRUE'
+        }
+        M.update = `TRUE'
+        C->O = O
+    }
     // - clear log and update M.P.run
     if (chflag) {
         if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
         C->log = NULL
     }
-    // - copy options
-    if (C->O!=O) {
-        M.update = `TRUE'
-        C->O = O
-    }
-    // - amount of trimming
+    // - copy trimming value
     if (C->trim!=trim) {
         M.update = `TRUE'
         C->trim = trim
@@ -1928,29 +1934,42 @@ void _Parse_L_store(`Main' M, `Str' id, `Lopt' O, `Str' key)
     // update preexisting version
     L = asarray(M.L, key)
     chflag = `FALSE'
-    if       (C->log==NULL)                                     chflag = `TRUE'
-    else if ((L->O.code==`TRUE')!=(O.code==`TRUE'))             chflag = `TRUE'
-    else if ((L->O.nolb==`TRUE')!=(O.nolb==`TRUE'))             chflag = `TRUE'
-    else if ((L->O.nogt==`TRUE')!=(O.nogt==`TRUE'))             chflag = `TRUE'
-    else if ((L->O.lnumbers==`TRUE')!=(O.lnumbers==`TRUE'))     chflag = `TRUE'
-    else if ((L->O.nocommands==`TRUE')!=(O.nocommands==`TRUE')) chflag = `TRUE'
-    else if ((L->O.noprompt==`TRUE')!=(O.noprompt==`TRUE'))     chflag = `TRUE'
-    else if ((L->O.verb==`TRUE')!=(O.verb==`TRUE'))             chflag = `TRUE'
-    else if  (L->O.clsize!=O.clsize)                            chflag = `TRUE'
-    else if  (L->O.range!=O.range)                              chflag = `TRUE'
-    else if  (L->O.ltag!=O.ltag)                                chflag = `TRUE'
-    else if  (L->O.tag!=O.tag)                                  chflag = `TRUE'
-    else if  (L->O.alert!=O.alert)                              chflag = `TRUE'
-    else if  (L->O.subst!=O.subst)                              chflag = `TRUE'
-    else if  (L->O.drop!=O.drop)                                chflag = `TRUE'
-    else if  (L->O.cnp!=O.cnp)                                  chflag = `TRUE'
-    else if  (L->O.qui!=O.qui)                                  chflag = `TRUE'
-    else if  (L->O.oom!=O.oom)                                  chflag = `TRUE'
-    if (chflag) L->log = NULL
+    if (C->log==NULL)                                            chflag = `TRUE'
     if (L->O!=O) {
+        if (!chflag) {
+            if      ((L->O.code==`TRUE')!=(O.code==`TRUE'))      chflag = `TRUE'
+            else if  (L->O.range!=O.range)                       chflag = `TRUE'
+            else if  (L->O.ltag!=O.ltag)                         chflag = `TRUE'
+            else if  (L->O.tag!=O.tag)                           chflag = `TRUE'
+            else if  (L->O.alert!=O.alert)                       chflag = `TRUE'
+            else if  (L->O.subst!=O.subst)                       chflag = `TRUE'
+            else if ((L->O.nolb==`TRUE')!=(O.nolb==`TRUE'))      chflag = `TRUE'
+            else if ((L->O.nogt==`TRUE')!=(O.nogt==`TRUE'))      chflag = `TRUE'
+            else if  (L->O.drop!=O.drop)                         chflag = `TRUE'
+            else if  (L->O.cnp!=O.cnp)                           chflag = `TRUE'
+            else if ((L->O.lnumbers==`TRUE')!=
+                        (O.lnumbers==`TRUE'))                    chflag = `TRUE'
+        }
+        if (!chflag) {
+            if (O.code==`TRUE') {
+                if ((L->O.verb==`TRUE')!=(O.verb==`TRUE'))       chflag = `TRUE'
+                if (O.verb!=`TRUE') {
+                    if (L->O.clsize!=O.clsize)                   chflag = `TRUE'
+                }
+            }
+            else {
+                if      ((L->O.nocommands==`TRUE')!=
+                            (O.nocommands==`TRUE'))              chflag = `TRUE'
+                else if ((L->O.noprompt==`TRUE')!=
+                         (O.noprompt==`TRUE'))                   chflag = `TRUE'
+                else if  (L->O.qui!=O.qui)                       chflag = `TRUE'
+                else if  (L->O.oom!=O.oom)                       chflag = `TRUE'
+            }
+        }
         M.update = `TRUE'
         L->O = O
     }
+    if (chflag) L->log = NULL
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2696,7 +2715,7 @@ void _Format(`Main' M, `Str' id)
     `pCode' C
     
     L = asarray(M.L, id)
-    if (L->save!=`TRUE') L->save = `FALSE'     // save log on disc: initialize
+    L->save = `FALSE'     // save log on disc: initialize
     C = asarray(M.C, L->id)
     if (L->O.code!=`TRUE') Format_log(M, *L, *C)
     else                   Format_clog(M, *L, *C)
@@ -3251,14 +3270,22 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
         return
     }
     if (L->O.scale<.) {
-        fput(M.tgt.fh, "\par\noindent%")
+        fwrite(M.tgt.fh, "\par\noindent")
         fput(M.tgt.fh, "\scalebox{"+sprintf("%g", L->O.scale)+"}{%")
+        if (L->O.blstretch<.) {
+            fput(M.tgt.fh, "\renewcommand{\baselinestretch}{"+
+            sprintf("%g", L->O.blstretch)+"}%")
+        }
         if (L->O.beamer!=`TRUE') {
             fput(M.tgt.fh, "\setlength{\leftmargini}{\leftmargini/\real{"+
                 sprintf("%g", L->O.scale)+"}}%")
         }
         fput(M.tgt.fh, "\begin{minipage}{\linewidth/\real{"+
              sprintf("%g", L->O.scale)+"}}%")
+    }
+    else if (L->O.blstretch<.) {
+        fput(M.tgt.fh, "{\renewcommand{\baselinestretch}{"+
+            sprintf("%g", L->O.blstretch)+"}%")
     }
     if (L->O.nobegin!=`TRUE') {
         if (L->O.Begin=="") {
@@ -3294,6 +3321,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     if (L->O.scale<.) {
         fwrite(M.tgt.fh, sprintf("\n\end{minipage}}"))
     }
+    else if (L->O.blstretch<.) fwrite(M.tgt.fh, "}")
 }
 
 void Weave_G(`Main' M, `Str' s, `Int' a)

@@ -24,8 +24,43 @@ Installation from GitHub:
 
 Main changes:
 
-    08sep2022 (version 1.0.0)
-    - minor change to how information on parts is managed
+    notes: - some of the log options listed under "main" in the help file are
+             not implemented yet for code logs
+           - use current version with care; still need to do some testing and
+             bug fixing; database format may still change
+    
+    21sep2022 (version 1.1.0):
+    - code blocks and logs are now treated as different elements in the internal
+      accounting system, such that a code block can have multiple logs (e.g. a
+      code log and a results log); \stlog{} and \stlog*{} added
+    - syntax \do<keyword>{filename} added to create code block from file
+    - log option range() added
+    - log option ltag() added
+    - log option lnumbers added
+    - log option clsize() added
+    - log option scale() added
+    - log option substitute() added
+    - log option blstretch() added
+    - log option nooutput() renamed to qui()
+    - log option verbatim now adds \begin{verbatim}...\end{verbatim} to log rather
+      than using \verbatiminput{}, such that \usepackage{verbatim} is no longer
+      needed
+    - linsize(.) now selects default behavior
+    - -trim- without argument now clears previous trim(#) setting
+    - \stgraph{} can now be specified as \stgraph*{}; graph option -custom-
+      discarded
+    - \stgraph{} now only allowed if there is at least preceding code block in the
+      current part
+    - target id now allowed in \stres{{log}} and \stres{{graph}}
+    - \stappend{} added
+    - "//ST.." tags will now be removed from files saved by dosave() 
+    - filename is now reported in error messages
+    - mata error messages are now also displayed if -quietly- is applied
+    - command -sttex extract- added
+    - dodir() and graph dir(), if not specified, were not updated if logdir()
+      changed along the way; this is fixed
+    - version of database now 1.1.0; new database will be created (causing execution
+      of all Stata commands) if sttex is applied to outdated database
     
     08sep2022 (version 1.0.0)
     - released on GitHub

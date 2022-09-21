@@ -1,5 +1,5 @@
 {smcl}
-{* 20sep2022}{...}
+{* 21sep2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -40,7 +40,7 @@
     Extract Stata code from source file:
 
 {p 8 15 2}
-    {cmd:sttex extract} {it:srcfile} 
+    {cmd:sttex extract} {it:srcfile}
     [{cmd:,}
     {opt sav:ing(tgtfile)} {opt r:eplace}
     ]
@@ -130,7 +130,7 @@
 {marker logopts}{col 5}{help sttex##logoptions:{it:log_options}}{col 29}Description
 {synoptline}
 {syntab :Main}
-{synopt:[{cmd:no}]{opt code}}display code log rather than 
+{synopt:[{cmd:no}]{opt code}}display code log rather than
     results log; default is {cmd:nocode}
     {p_end}
 {synopt:{opt range(from [to])}}select range of lines from log
@@ -296,9 +296,9 @@
     need to be typed if options are specified). An automatic name is assigned if {it:id}
     is omitted. The {cmd:\do}{it:keyword}{cmd:{}} syntax is equivalent to
     {cmd:\begin{c -(}}{it:keyword}{cmd:{c )-}} ... {cmd:\end{c -(}}{it:keyword}{cmd:{c )-}}, but the commands
-    are read from {it:filename} rather than being provided directly within the 
+    are read from {it:filename} rather than being provided directly within the
     document. {it:filename} may contain an absolute or relative path; extension
-    {cmd:.do} is assumed if {it:filename} is specified without suffix. 
+    {cmd:.do} is assumed if {it:filename} is specified without suffix.
 
 {pstd}
     The {cmd:\begin{}}, {cmd:\end{}}, and {cmd:\do}{it:keyword}{cmd:{}}
@@ -368,7 +368,7 @@
 
 {pstd}
     The {cmd:\stgraph{}} tag must start at the beginning of a line;
-    any text in the same line after the tag will be ignored. Furthermore, 
+    any text in the same line after the tag will be ignored. Furthermore,
     {cmd:\stgraph{}} is only allowed if there is at least one prior code block
     in the current part of the document. The {cmd:do}/{cmd:nodo} setting of the
     prior code block is inherited by {cmd:\stgraph{}}.
@@ -402,7 +402,7 @@
     {cmd:%} to prevent LaTeX syntax highlighting from interpreting {cmd:%} and
     subsequent text as a comment. {cmd:sttex} will replace {cmd:\%} by
     {cmd:%} before processing {it:{help display:display_directive}}.
-    
+
 
 {pstd}
     Syntax 2: Pre-processing time evaluation
@@ -471,13 +471,13 @@
     where {it:id} is the name of the relevant block (the block must already exist;
     referencing a future block is not allowed). The last block
     will be used if {it:id} is omitted. The copies created by {cmd:\stlog{}}
-    will be named {it:id}{cmd:.1}, {it:id}{cmd:.2}, etc. 
+    will be named {it:id}{cmd:.1}, {it:id}{cmd:.2}, etc.
 
 {pstd}
     {cmd:\stlog{}} is useful if you want to include multiply copies of a log with
     different options. For example, you could specify option {cmd:range(1 10)} with the main
-    copy to print only lines 1-10 and then use {cmd:\stlog{}} with option 
-    {cmd:range(11 .)} to print the remaining lines. Likewise you could 
+    copy to print only lines 1-10 and then use {cmd:\stlog{}} with option
+    {cmd:range(11 .)} to print the remaining lines. Likewise you could
     specify option {cmd:code} with the main copy to print the code log and then
     print the results log by applying {cmd:\stlog{}} without option {cmd:code}.
 
@@ -513,7 +513,7 @@
     ignored.
 
 {pstd}
-    {it:substitutions} may be specified to apply substitutions within the 
+    {it:substitutions} may be specified to apply substitutions within the
     appended contents. The syntax of {it:substitutions} is
 
         {it:strlist} {cmd:=} {it:to} [ {it:strlist} {cmd:=} {it:to} ... ]
@@ -575,7 +575,7 @@
     where {it:id} provides a custom name for the part. An automatic name is
     assigned if {it:id} is omitted or if {it:id} is equal to
     {cmd:.} (missing). {cmd:sttex} will decide part by part whether
-    to run the commands. 
+    to run the commands.
 
 {pstd}
     {it:parent} specifies the name ({it:id}) of an optional parent part. A change
@@ -596,7 +596,7 @@
     specify {cmd:.} to create a standalone part (which, however, may have children).
 
 {pstd}
-    Specify {help sttex##doopts:{it:do_options}} and 
+    Specify {help sttex##doopts:{it:do_options}} and
     {help sttex##gropts:{it:graph_options}} to change overall options between
     parts.
 
@@ -674,7 +674,7 @@
 {dlgtab:Stata commands}
 
 {phang}
-    {opt nostop} does not stop processing the Stata commands when an error 
+    {opt nostop} does not stop processing the Stata commands when an error
     occurs. This option may be useful if you want to document errors.
 
 {pmore}
@@ -752,7 +752,7 @@
 {phang}
     [{cmd:no}]{opt do} enforces or suppresses evaluating the commands in a code
     block. Specify {cmd:do} if you always want
-    to execute the commands, irrespective of whether there have been 
+    to execute the commands, irrespective of whether there have been
     changes in the code or not; specify {cmd:nodo} if you never want to execute
     the commands.
 
@@ -794,7 +794,7 @@
 
 {phang}
     [{cmd:no}]{opt trim}[{cmd:({it:#})}] specifies whether to remove white space
-    on the left of the commands in a code block. Default is 
+    on the left of the commands in a code block. Default is
     {cmd:trim} (i.e. to remove indentation). Argument {it:#}, if specified,
     limits the number of white-space characters to be removed. In any case, at
     most {it:k} characters will be removed, where {it:k} is the minimum number
@@ -812,7 +812,7 @@
 
 {phang}
     {it:log_options} are options selecting the type of log to be used
-    and how the log is formatted and embedded in the target file. See 
+    and how the log is formatted and embedded in the target file. See
     {helpb sttex##logoptions:Log options} blow.
 
 {marker logoptions}{...}
@@ -863,7 +863,7 @@
 
 {marker subst}{...}
 {phang}
-    {opt substitute(matchlist)} applies string substitutions in the log. The  the syntax of 
+    {opt substitute(matchlist)} applies string substitutions in the log. The  the syntax of
     {it:matchlist} is
 
 
@@ -878,18 +878,18 @@
 
 {phang}
     [{cmd:{ul:no}}]{opt lb} specifies whether to remove line break comments ({cmd:/// ...})
-    from the command lines in the log. Default is {cmd:lb}, that is, to retain the 
+    from the command lines in the log. Default is {cmd:lb}, that is, to retain the
     line break comments.
 
 {phang}
     [{cmd:{ul:no}}]{opt gt} specifies whether to remove continuation symbols ({cmd:> }) from the
-    command lines in the log. Default is {cmd:gt}, that is, to retain the 
+    command lines in the log. Default is {cmd:gt}, that is, to retain the
     continuation symbols.
 
 {marker drop}{...}
 {phang}
     {opt drop(numlist)} removes the specified commands (and their output) from
-    the log. Positive integers in {help numlist:{it:numlist}} refer to the 
+    the log. Positive integers in {help numlist:{it:numlist}} refer to the
     positions of the commands from the start, negative integers refer to positions
     from the end. The last command can also be address by {cmd:.} (missing).
 
@@ -911,7 +911,7 @@
 
 {phang}
     [{cmd:{ul:no}}]{opt prompt} specifies whether to remove command prompts ({cmd:. }) from the
-    command lines in the results log. Default is {cmd:prompt}, that is, to retain the 
+    command lines in the results log. Default is {cmd:prompt}, that is, to retain the
     command prompts.
 
 {phang}
@@ -922,7 +922,7 @@
 
 {phang}
     {opt oom(numlist)} removes the output from the specified commands and includes
-    an output-omitted tag ({cmd:\oom}). {help numlist:{it:numlist}} is as for 
+    an output-omitted tag ({cmd:\oom}). {help numlist:{it:numlist}} is as for
     {helpb sttex##drop:drop()}. Use this option as an alternative to including
     {cmd://SToom} comments in the code. The advantage of {cmd:oom()} is that no
     reevaluation of the code is needed if the option changes.
@@ -956,14 +956,14 @@
 
 {phang}
     [{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}] specifies the begin tag of the
-    environment used to embed the log in the latex file. The default begin tag 
+    environment used to embed the log in the latex file. The default begin tag
     is {cmd:\begin{stlog}} (or {cmd:\begin{stverbatim}} in case of a code log with
     option {cmd:verbatim}). Specify {cmd:nobegin} to omit the begin tag; specify
     {opt begin(str)} to set the begin tag to {it:str}.
 
 {phang}
     [{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}] specifies the end tag of the
-    environment used to embed the log in the latex file. The default end tag 
+    environment used to embed the log in the latex file. The default end tag
     is {cmd:\end{stlog}} (or {cmd:\end{stverbatim}} in case of a code log with
     option {cmd:verbatim}). Specify {cmd:noend} to omit the end tag; specify
     {opt end(str)} to set the end tag to {it:str}.
@@ -1029,7 +1029,7 @@
 
 {phang}
     [{cmd:no}]{opt suffix} specifies whether to type the file suffix
-    in the {cmd:\includegraphics{}} or {cmd:\epsfig{}} command. Default is 
+    in the {cmd:\includegraphics{}} or {cmd:\epsfig{}} command. Default is
     {cmd:nosuffix}.
 
 {phang}
@@ -1068,7 +1068,7 @@
     To be able to compile a LaTeX file that includes Stata output inserted by
     {cmd:sttex} you should include command {cmd:\usepackage{stata}}
     in the preamble of the source file ({cmd:stata.sty} is provided by Stata Corp
-    as part of {helpb sjlatex}). Furthermore, to be able to display graphs, 
+    as part of {helpb sjlatex}). Furthermore, to be able to display graphs,
     you may want to include {cmd:\usepackage{graphicx}}. For example, your file
     could start about as follows:
 
