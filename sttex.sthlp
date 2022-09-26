@@ -1,5 +1,5 @@
 {smcl}
-{* 21sep2022}{...}
+{* 26sep2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -151,7 +151,9 @@
     {p_end}
 {synopt:{opth cnp(numlist)}}insert {cmd:\cnp} after selected commands
     {p_end}
-{synopt:{opt lnum:bers}}add line numbers
+{synopt:[{cmd:{ul:no}}]{opt lnum:bers}}add line numbers; requires definition of {cmd:\stlnum{}}
+    {p_end}
+{synopt:[{cmd:{ul:no}}]{opt lcont:inue}}continue line numbers from prior log
     {p_end}
 
 {syntab :Results log only}
@@ -321,18 +323,22 @@
 {pstd}
     Within {it:commands} (or within {it:filename}) you can use the following tags:
 
-{p2col:{cmd://STqui}}suppress the output of the subsequent command
+{p2col:{cmd://STcnp}}include a page break and, depending on settings, a
+    continued-on-next-page message; also see option {helpb sttex##cnp:cnp()}
+    {p_end}
+{p2col:{cmd://STqui}}suppress the output of the subsequent command (Stata code
+    only); also see option {helpb sttex##qui:qui()}
     {p_end}
 {p2col:{cmd://SToom}}suppress the output of the subsequent command and include
-    an output-omitted message after the command
-    {p_end}
-{p2col:{cmd://STcnp}}include a page break and, depending on settings, a
-    continued-on-next-page message
+    an output-omitted message after the command (Stata code only); also see option
+    {helpb sttex##oom:oom()}
     {p_end}
 
 {pstd}
     These tags must start at the beginning of a line; text in
-    the same line after a tag is ignored.
+    the same line after a tag is ignored. {cmd://STcnp} can be used within
+    Stata code and Mata code. {cmd://STqui} and {cmd://SToom} can only be used in
+    Stata code; these tags will lead to error if used in Mata code.
 
 {pstd}
     Note that {cmd:\dostata{c -(}}{it:filename}{cmd:{c )-}} copies
@@ -461,17 +467,24 @@
 {dlgtab:Log copies}
 
 {pstd}
-    To obtain a copy of the results log or the code log from a block of Stata commands, type
+    To obtain a copy of the results log or the code log from one or multiple blocks
+    of Stata commands, type
 
-        {cmd:\stlog{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
+        {cmd:\stlog{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
     or
-        {cmd:\stlog*{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
+        {cmd:\stlog*{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
 
 {pstd}
-    where {it:id} is the name of the relevant block (the block must already exist;
-    referencing a future block is not allowed). The last block
-    will be used if {it:id} is omitted. The copies created by {cmd:\stlog{}}
-    will be named {it:id}{cmd:.1}, {it:id}{cmd:.2}, etc.
+    where {it:idlist} is a space-separated list of the names of the blocks
+    (the blocks must already exist; referencing a future block is not allowed). The last block
+    will be used if {it:idlist} is omitted. The log created by {cmd:\stlog{}}
+    will be named {it:id}{cmd:.}{it:#}, where {it:id} is the name of the 
+    (first) code block referenced by {it:idlist} and where {it:#} is a counter.
+
+{pstd}
+    The {cmd:*} and {cmd:?} wildcards are allowed in {it:idlist}. For example, 
+    {cmd:\stlog[*]{}} will compile a log from all existing code blocks (in the
+    order in which they appear in the document).
 
 {pstd}
     {cmd:\stlog{}} is useful if you want to include multiply copies of a log with
@@ -828,7 +841,8 @@
     {opt range(from [to])} selects a specified range of the log, where {it:from}
     is the first line number and {it:to} is the last line number to be included. To
     include all remaining lines after {it:from}, you may omit {it:to} or specify
-    {it:to} as {cmd:.} (missing).
+    {it:to} as {cmd:.} (missing). {cmd:range()} is applied after options
+    {cmd:drop()}, {cmd:qui()}, and {cmd:oom()} have taken effect.
 
 {marker ltag}{...}
 {phang}
@@ -841,7 +855,8 @@
     where {help numlist:{it:numlist}} is a list of target line numbers, and {it:left} and
     {it:right} are strings to be added to the beginning and the end of each selected
     line, respectively. Enclose strings in double quotes if they contain
-    spaces. Specify {it:left} or {it:right} as {cmd:""} for empty string.
+    spaces. Specify {it:left} or {it:right} as {cmd:""} for empty string. {cmd:ltag()} is
+    applied at the end, after other formatting options have taken effect.
 
 {marker tag}{...}
 {phang}
@@ -893,6 +908,7 @@
     positions of the commands from the start, negative integers refer to positions
     from the end. The last command can also be address by {cmd:.} (missing).
 
+{marker cnp}{...}
 {phang}
     {opt cnp(numlist)} inserts a continued-on-next-page tag ({cmd:\cnp}) after
     the specified commands. {help numlist:{it:numlist}} is as for
@@ -900,8 +916,29 @@
     {cmd://STcnp} comments in the code. The advantage of {cmd:cnp()} is that no
     reevaluation of the code is needed if the option changes.
 
+{pmore}
+    By default, {cmd:\cnp} is defined as {cmd:\clearpage} in {cmd:stata.sty}. If you
+    want to print a continued-on-next-page message, redefine {cmd:\cnp} as
+    {cmd:\onnextpage}, e.g. by including {cmd:\let\cnp=\onnextpage} in the preamble
+    of the document.
+
 {phang}
-    {opt lnumbers} adds line numbers to the log.
+    [{cmd:{ul:no}}]{opt lnumbers} specifies whether to add line numbers to the
+    log. Default is {cmd:nolnumbers}. Line numbers are added at the end, after
+    other formatting options have taken effect.
+
+{pmore}
+    The line numbers will be included in command {cmd:\stlnum{}}, which needs to
+    be defined in the preamble of the document. For example, define 
+    {cmd:\stlnum{}} as {cmd:\def\stlnum#1{\makebox[0pt][r]{#1~}}} to print right
+    aligned-numbers on the left of the log. An exception is when both {cmd:code}
+    and {cmd:verbatim} are specified; in this case the line numbers will be
+    added to the log as is.
+
+{phang}
+    [{cmd:{ul:no}}]{opt lcontinue} specifies whether to continue
+    the line number counter from the prior log. Default is {cmd:nolcontinue}. Option
+    {cmd:continue} is relevant only if {cmd:lnumbers} has been specified.
 
 {dlgtab:Results log only}
 
@@ -914,12 +951,14 @@
     command lines in the results log. Default is {cmd:prompt}, that is, to retain the
     command prompts.
 
+{marker qui}{...}
 {phang}
     {opt qui(numlist)} removes the output from the specified commands. {help numlist:{it:numlist}}
     is as for {helpb sttex##drop:drop()}. Use this option as an alternative to including
     {cmd://STqui} comments in the code. The advantage of {cmd:qui()} is that no reevaluation of the
     code is needed if the option changes.
 
+{marker oom}{...}
 {phang}
     {opt oom(numlist)} removes the output from the specified commands and includes
     an output-omitted tag ({cmd:\oom}). {help numlist:{it:numlist}} is as for

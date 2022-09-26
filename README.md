@@ -28,7 +28,19 @@ Main changes:
              not implemented yet for code logs
            - use current version with care; still need to do some testing and
              bug fixing; database format may still change
-    
+
+    26sep2022 (version 1.1.1):
+    - \stlog{} can now obtain logs from multiple code blocks
+    - log options tag(), alert(), and substitute() are now also applied to code logs
+    - log option lcontinue added
+    - range() is now applied before lnumbers and ltags()
+    - lnumbers are now included in \stlnum{}
+    - line numbers and line tags are now added at the very end, when exporting a log
+    - now using errprintf() to display errors in Mata
+    - added a fix for vertical spacing after (non-verbatim) code log
+    - order of elements is now stored in the database; dbversion now 1.1.1
+    - error message is now written to target file if log or graph is not found
+
     21sep2022 (version 1.1.0):
     - code blocks and logs are now treated as different elements in the internal
       accounting system, such that a code block can have multiple logs (e.g. a

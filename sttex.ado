@@ -1,4 +1,4 @@
-*! version 1.1.0  21sep2022  Ben Jann
+*! version 1.1.1  26sep2022  Ben Jann
 
 program sttex
     version 11
@@ -205,8 +205,8 @@ program _collect_do_options
 end
 
 program _collect_log_options
-    local opts CODE LB GT LNUMbers COMmands PRompt VERBatim STATic BEGIN END /*
-        */ BEAMER
+    local opts CODE LB GT LNUMbers LCONTinue COMmands PRompt VERBatim STATic /*
+        */ BEGIN END BEAMER
     foreach o of local opts {
         local noopts `noopts' NO`o'
     }
@@ -520,6 +520,8 @@ local Log       struct `LOG' scalar
 local pLog      pointer(`Log') scalar
 local LOPT      LOPT
 local Lopt      struct `LOPT' scalar
+local LNUM      LNUM
+local Lnum      struct `LNUM' scalar
 // - structures for Graphs
 local GRAPH     GRAPH
 local Graph     struct `GRAPH' scalar
@@ -559,7 +561,8 @@ struct `MAIN' {
                 run         // whether to run sttex or only extract code
     `Int'       c,          // counter for code blocks (within part)
                 g,          // counter for graphs (within block)
-                i           // counter for inline expressions (within part)
+                i,          // counter for inline expressions (within part)
+                lnum        // line number counter
     `Str'       lognm,      // Stata name of main log
                 srcdir,     // path of source file
                 tgtdir,     // path of output file
@@ -584,10 +587,10 @@ struct `MAIN' {
                 G,          // associative array for graphs
                 I,          // associative array for inline expressions
                 Lcnt        // log counter (number of logs per code block)
-    `StrC'      Ckeys,      // keys of code blocks
-                Lkeys,      // keys of logs
-                Gkeys,      // keys of graphs
-                Ikeys       // keys of inline expressions
+    `StrC'      Ckeys, Ckeys0,  // keys of code blocks
+                Lkeys, Lkeys0,  // keys of logs
+                Gkeys, Gkeys0,  // keys of graphs
+                Ikeys, Ikeys0   // keys of inline expressions
     `Int'       ckeys,      // length of Ckeys
                 lkeys,      // length of Lkeys
                 gkeys,      // length of Gkeys
@@ -709,11 +712,21 @@ struct `COPT' {
 
 // structure for logs
 struct `LOG' {
-    `Str'       id         // id of relevant code block
     `Bool'      newlog,    // whether log changed
                 save       // whether log needs to be saved on disc
     `Lopt'      O          // options
     `pStrC'     log        // processed LaTeX log
+    `Lnum'      Lnum       // line numbers
+    `StrC'      ids,       // list if ids of relevant code blocks
+                lhs,       // line suffix from ltag()
+                rhs        // line prefix from ltag()
+}
+
+// structure for line numbers
+struct `LNUM' {
+    `Int'       i0         // offset
+    `IntC'      idx,       // line numbers
+                p          // permutation vector of lines that have line numbers
 }
 
 // structure for log options
@@ -722,6 +735,7 @@ struct `LOPT' {
                 nolb,       // strip line break comments from log
                 nogt,       // strip line continuation symbols from log
                 lnumbers,   // add line numbers
+                lcont,      // continued line numbers
                 nocommands, // strip commands from log
                 noprompt,   // strip command prompt
                 verb,       // use verbatim copy of commands
@@ -844,7 +858,7 @@ void PrepareFilenames()
     else if (pathsuffix(tgt)=="") tgt = tgt + suf
     if (!pathisabs(tgt)) tgt = pathjoin(srcdir, tgt)
     if (src==tgt) {
-        _errtxt("target file can not be the same as the source file")
+        errprintf("target file can not be the same as the source file\n")
         exit(602)
     }
     pathsplit(tgt, tgtdir, tgtnm)
@@ -892,7 +906,16 @@ void Process()
     }
 
     // remove old keys
-    if (!M.nodb & !M.reset) DeleteOldKeys(M)
+    if (!M.nodb & !M.reset) {
+        DeleteOldKeys(M)
+        if (!M.update) {
+            // check whether order of elements changed
+            if      (M.Ckeys!=M.Ckeys0) M.update = `TRUE'
+            else if (M.Lkeys!=M.Lkeys0) M.update = `TRUE'
+            else if (M.Gkeys!=M.Gkeys0) M.update = `TRUE'
+            else if (M.Ikeys!=M.Ikeys0) M.update = `TRUE'
+        }
+    }
     
     // run do-file and collect log
     run = sum(M.P.run)
@@ -988,6 +1011,7 @@ void Process()
     M.P.l   = 0
     
     // other
+    M.lnum = 0
     M.c = M.ckeys = M.lkeys = M.g = M.gkeys = M.i = M.ikeys = 0 // counters
     M.dosave = `FALSE'
     M.punct = "_"
@@ -1108,7 +1132,7 @@ void _collect_do_options(`Main' M, `Copt' O, `Str' opts, `Source' F,
     // run Stata parser
     rc = _stata("_collect_do_options, " + opts)
     if (rc) {
-        if (init==1)     _errtxt("error in %STinit")
+        if (init==1)     errprintf("error in %STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1149,7 +1173,7 @@ void _collect_log_options(`Main' M, `Lopt' O, `Str' opts, `Source' F,
     // run Stata parser
     rc = _stata("_collect_log_options, " + opts)
     if (rc) {
-        if (init==1)     _errtxt("error in %STinit")
+        if (init==1)     errprintf("error in %STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1158,6 +1182,7 @@ void _collect_log_options(`Main' M, `Lopt' O, `Str' opts, `Source' F,
     _collect_onoff_option("nolb"      , O.nolb)
     _collect_onoff_option("nogt"      , O.nogt)
     _collect_onoff_option("lnumbers"  , O.lnumbers)
+    _collect_onoff_option("lcontinue" , O.lcont)
     _collect_onoff_option("nocommands", O.nocommands)
     _collect_onoff_option("noprompt"  , O.noprompt)
     _collect_onoff_option("verbatim"  , O.verb)
@@ -1199,7 +1224,7 @@ void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F,
     if (opts=="") return
     rc = _stata("_collect_graph_options, " + opts)
     if (rc) {
-        if (init==1)     _errtxt("error in %STinit")
+        if (init==1)     errprintf("error in %STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1347,8 +1372,8 @@ void _collect_onoff_option(`Str' opt, `Bool' o, | `Str' prefix)
         rc = _stata("numlist " + "`" + `"""' + dict[i,1] + `"""' +  "'" +
             ", int range(>=0) sort")
         if (rc) {
-            _errtxt("invalid specification of ltag() option")
-            if (init==1) _errtxt("error in %STinit")
+            errprintf("invalid specification of ltag() option\n")
+            if (init==1) errprintf("error in %STinit\n")
             else if (F.i0<.) ErrorLines(F)
             exit(rc)
         }
@@ -1369,12 +1394,12 @@ void DatabaseWrite(`Main' M)
     st_local("dbfile", M.db.fn)
     // open DB and write header
     M.db.fh = FOpen(M.db.fn, "w", "", 1)
-    fput(M.db.fh, "stTeX database version 1.1.0")
-    // write associative arrays
-    fputmatrix(M.db.fh, M.C)
-    fputmatrix(M.db.fh, M.L)
-    fputmatrix(M.db.fh, M.G)
-    fputmatrix(M.db.fh, M.I)
+    fput(M.db.fh, "stTeX database version 1.1.1")
+    // write keys and associative arrays
+    fputmatrix(M.db.fh, M.Ckeys); fputmatrix(M.db.fh, M.C)
+    fputmatrix(M.db.fh, M.Lkeys); fputmatrix(M.db.fh, M.L)
+    fputmatrix(M.db.fh, M.Gkeys); fputmatrix(M.db.fh, M.G)
+    fputmatrix(M.db.fh, M.Ikeys); fputmatrix(M.db.fh, M.I)
     // close DB
     FClose(M.db.fh, "")
     printf("{txt}(sttex database saved as %s)\n", M.db.fn)
@@ -1388,17 +1413,17 @@ void DatabaseWrite(`Main' M)
     if (!fileexists(M.db.fn)) return(0)
     // open DB and read header
     M.db.fh = FOpen(M.db.fn, "r")
-    if (fget(M.db.fh)!="stTeX database version 1.1.0") {
+    if (fget(M.db.fh)!="stTeX database version 1.1.1") {
         printf("{txt}(database %s not compatible; ", M.db.fn)
         printf("{txt}generating new database)\n")
         FClose(M.db.fh)
         return(0)
     }
     // read associative arrays
-    M.C = fgetmatrix(M.db.fh)
-    M.L = fgetmatrix(M.db.fh)
-    M.G = fgetmatrix(M.db.fh)
-    M.I = fgetmatrix(M.db.fh)
+    M.Ckeys0 = fgetmatrix(M.db.fh); M.C = fgetmatrix(M.db.fh)
+    M.Lkeys0 = fgetmatrix(M.db.fh); M.L = fgetmatrix(M.db.fh)
+    M.Gkeys0 = fgetmatrix(M.db.fh); M.G = fgetmatrix(M.db.fh)
+    M.Ikeys0 = fgetmatrix(M.db.fh); M.I = fgetmatrix(M.db.fh)
     FClose(M.db.fh)
     return(1)
 }
@@ -1525,7 +1550,7 @@ void Part(`Main' M, `Str' s, `Source' F)
             id = tok
             if (id==".") id = ""
             else if (!st_islmname(id)) {
-                _errtxt(sprintf("'%s' invalid name", id))
+                errprintf("'%s' invalid name\n", id)
                 F.i0 = F.i; ErrorLines(F)
                 exit(7)
             }
@@ -1535,7 +1560,7 @@ void Part(`Main' M, `Str' s, `Source' F)
             pid = tok
             if (pid!="." & pid!="") {
                 if (!st_islmname(pid)) {
-                    _errtxt(sprintf("'%s' invalid name", pid))
+                    errprintf("'%s' invalid name\n", pid)
                     F.i0 = F.i; ErrorLines(F)
                     exit(7)
                 }
@@ -1544,14 +1569,14 @@ void Part(`Main' M, `Str' s, `Source' F)
         }
         if (tok==",") opts = tokenrest(M.t1)
         else if (tok!="") {
-            _errtxt(sprintf("'%s' not allowed", tok))
+            errprintf("'%s' not allowed\n", tok)
             F.i0 = F.i; ErrorLines(F)
             exit(499)
         }
     }
     if (id=="") id = strofreal(M.P.j) // j is offet by one (j=1 for part 0)
     if (anyof(M.P.id[|1\M.P.j|], id)) {
-        _errtxt(sprintf("'%s' already taken; part names must be unique", id))
+        errprintf("'%s' already taken; part names must be unique\n", id)
         F.i0 = F.i; ErrorLines(F)
         exit(499)
     }
@@ -1605,9 +1630,9 @@ void Part(`Main' M, `Str' s, `Source' F)
         if (rc = _Parse_C_read_end(M, F, tag)) break
     }
     if (rc!=1) {
-        _errtxt(sprintf("line %g in %s: %s", F.i0, F.fn, F.S[F.i0]))
-        if (rc==0)  _errtxt("end not found")
-        else        _errtxt(sprintf("ended on line %g with: %s", F.i, F.S[F.i]))
+        errprintf("line %g in %s: %s\n", F.i0, F.fn, F.S[F.i0])
+        if (rc==0)  errprintf("end not found\n")
+        else        errprintf("ended on line %g with: %s\n", F.i, F.S[F.i])
         exit(499)
     }
     // copy commands
@@ -1657,13 +1682,13 @@ void Part(`Main' M, `Str' s, `Source' F)
     F.i0 = F.i
     fn = TabTrim(Get_Arg(M, "{", "}", F))
     if (fn=="") {
-        _errtxt("invalid syntax; {it:filename} required")
+        errprintf("invalid syntax; {it:filename} required\n")
         ErrorLines(F)
         exit(601)
     }
     if (!pathisabs(fn)) fn = pathjoin(M.srcdir, fn)
     if (!fileexists(fn)) {
-        _errtxt(sprintf("file %s not found", fn))
+        errprintf("file %s not found\n", fn)
         ErrorLines(F)
         exit(601)
     }
@@ -1719,12 +1744,12 @@ void _Parse_C_opts(`Main' M, `Source' F, `Str' tag, `Str' id, `Bool' quietly,
     if (id=="") id = (M.P.j>1 ? M.P.id[M.P.j] + M.punct : "") + 
                      strofreal(M.c)
     else if (!st_islmname(id)) {
-        _errtxt(sprintf("'%s' invalid name", id))
+        errprintf("'%s' invalid name\n", id)
         ErrorLines(F)
         exit(7)
     }
     if (M.ckeys ? anyof(M.Ckeys[|1\M.ckeys|], id) : 0) {
-        _errtxt(sprintf("'%s' already taken; log names must be unique", id))
+        errprintf("'%s' already taken; log names must be unique\n", id)
         ErrorLines(F)
         exit(499)
     }
@@ -1746,19 +1771,13 @@ void _Parse_C(`Main' M, `Str' id, `Bool' mata, `Copt' O, `StrC' S)
         }
         if (O.nooutput==`TRUE') fput(M.dof.fh, "set output inform")
         // - start mata if needed
-        if (mata==`TRUE') {
-            //fput(M.dof.fh, "#delimit cr")                                     // ???
-            fput(M.dof.fh, "mata:")
-        }
+        if (mata==`TRUE') fput(M.dof.fh, "mata:")
         // - write the commands
         fput(M.dof.fh, M.Ltag.C + id)
         _Fput(M.dof.fh, S)
         fput(M.dof.fh, M.Ltag.Cend)
         // - end mata if needed
-        if (mata==`TRUE') {
-            fput(M.dof.fh, "end")
-            //fput(M.dof.fh, "#delimit ;")                                      // ???
-        }
+        if (mata==`TRUE') fput(M.dof.fh, "end")
         // - restore line size and output mode
         if (O.linesize<.) {
             fput(M.dof.fh, sprintf("set linesize %g", lsize0))
@@ -1802,8 +1821,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     if (O.dosave==`TRUE') M.dosave = `TRUE'
     // no preexisting version
     if (!asarray_contains(M.C, id)) {
-        if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
-        M.update = `TRUE'
+        if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE' // not forced nodo
         C = &(`CODE'())
         C->newcmd = `TRUE'
         C->mata = mata
@@ -1811,6 +1829,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
         C->O = O
         C->cmd = &S
         asarray(M.C, id, C)
+        M.update = `TRUE'
         return
     }
     // update preexisting version
@@ -1826,11 +1845,11 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     }
     // - change in commands
     if (*C->cmd!=S) {
-        C->cmd = &S; C->newcmd = `TRUE'; M.update = `TRUE';     chflag = `TRUE'
+        C->cmd = &S; C->newcmd = `TRUE';                        chflag = `TRUE'
     }
     // - change in type of code (Stata vs. Mata)
     else if (C->mata!=mata) {
-        C->mata = mata; M.update = `TRUE';                      chflag = `TRUE'
+        C->mata = mata;                                         chflag = `TRUE'
     }
     // - other changes that require rerunning the code or updating the db
     if (C->O!=O) {
@@ -1838,18 +1857,19 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
             if ((C->O.nooutput==`TRUE')!=(O.nooutput==`TRUE'))  chflag = `TRUE'
             else if  (C->O.linesize!=O.linesize)                chflag = `TRUE'
         }
-        M.update = `TRUE'
         C->O = O
+        M.update = `TRUE'
     }
     // - clear log and update M.P.run
     if (chflag) {
-        if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
+        if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE' // not forced nodo
         C->log = NULL
+        M.update = `TRUE'
     }
     // - copy trimming value
     if (C->trim!=trim) {
-        M.update = `TRUE'
         C->trim = trim
+        M.update = `TRUE'
     }
 }
 
@@ -1861,80 +1881,127 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
 `Bool' Parse_L(`Main' M, `Source' F, `Bool' quietly)
 {
     `Bool' rc; `Unset' rc
-    `Str'  id, opts
+    `Str'  idlist, opts
     `Lopt' O
     
     F.i0 = F.i
-    id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
+    idlist = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     opts = TabTrim(Get_Arg(M, "{", "}", F, rc))
     if (rc) return(`FALSE')
     O = M.Lopt
     _collect_log_options(M, O, opts, F)
     if (!M.run) return(`TRUE')
-    _Parse_L(M, F, id, O, quietly)
+    _Parse_L(M, F, idlist, O, quietly)
     return(`TRUE')
 }
 
-void _Parse_L(`Main' M, `Source' F, `Str' id, `Lopt' O, `Bool' quietly)
+void _Parse_L(`Main' M, `Source' F, `Str' idlist, `Lopt' O, `Bool' quietly)
 {
     `Int'   j
     `Str'   key
-
-    // find code block
-    if (id=="") id = M.lastC
-    if (id=="") {
-        _errtxt("cannot create log; no code block found")
-        ErrorLines(F)
-        exit(499)
+    `StrC'  ids
+    
+    // find code block(s)
+    if (idlist=="") {
+        ids = M.lastC
+        if (ids=="") {
+            errprintf("cannot create log; no code block found\n")
+            ErrorLines(F)
+            exit(499)
+        }
     }
-    if (M.ckeys ? !anyof(M.Ckeys[|1\M.ckeys|], id) : 1) {
-        _errtxt(sprintf("cannot create log; code block '%s' not found", id))
-        ErrorLines(F)
-        exit(499)
-    }
-    // update log counter
-    if (asarray_contains(M.Lcnt, id)) j = asarray(M.Lcnt, id) + 1
-    else                              j = 0
-    asarray(M.Lcnt, id, j)
-    // generate log id
-    if (j) key = id + "." + strofreal(j)
-    else   key = id
-    if (M.lkeys ? anyof(M.Lkeys[|1\M.lkeys|], key) : 0) { // cannot this happen?
-        _errtxt(sprintf("'%s' already taken; log names must be unique", key))
+    else ids = _Parse_L_getids(F, M.Ckeys[|1\M.ckeys|], M.ckeys, tokens(idlist))
+    // update log counter and generate log id
+    if (asarray_contains(M.Lcnt, ids[1])) j = asarray(M.Lcnt, ids[1]) + 1
+    else                                  j = 0
+    asarray(M.Lcnt, ids[1], j)
+    if (j) key = ids[1] + "." + strofreal(j)
+    else   key = ids[1]
+    if (M.lkeys ? anyof(M.Lkeys[|1\M.lkeys|], key) : 0) { // can this happen?
+        errprintf("'%s' already taken; log names must be unique\n", key)
         ErrorLines(F)
         exit(499)
     }
     // write tags to LaTeX file
     if (quietly!=`TRUE') fput(M.tex.fh, M.Ttag.L + key + M.Ttag.Lend)
     // update database
-    _Parse_L_store(M, id, O, key)
+    _Parse_L_store(M, ids, O, key)
     AppendElement(M.Lkeys, M.lkeys, key) // increases counter by 1
     M.lastL = key
 }
 
-// update info on code block in database and determine whether code needs to be run
-void _Parse_L_store(`Main' M, `Str' id, `Lopt' O, `Str' key)
+`StrC' _Parse_L_getids(`Source' F, `StrC' keys, `Int' nkeys, `StrR' idlist)
 {
-    `Bool'   chflag
-    `pLog'   L
-    `pCode'  C
+    `Int'   i, j, k, n
+    `IntC'  idx, p
+    `BoolC' p0 // whether id already used
+    `StrC'  ids
     
-    // get code block
-    C = asarray(M.C, id)
+    idx = nkeys ? 1::nkeys : J(0,1,.)
+    ids = J(nkeys, 1, "")
+    p0  = J(nkeys, 1, 0)
+    k   = 0
+    n   = length(idlist)
+    for (i=1;i<=n;i++) {
+        p = select(idx, strmatch(keys, idlist[i]))
+        if (!length(p)) {
+            errprintf("no code block found that matches '%s'\n", idlist[i])
+            ErrorLines(F)
+            exit(499)
+        }
+        p = select(p, !p0[p])
+        j = length(p)
+        if (!j) continue
+        p0[p] = J(j, 1, 1)
+        ids[|k+1 \ k+j|] = keys[p]
+        k = k + j
+    }
+    return(ids[|1 \ k|])
+}
+
+// update info on code block in database and determine whether code needs to be run
+void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
+{
+    `Bool'  chflag
+    `Int'   i
+    `pLog'  L
+    `pCode' C
+    
+    // get logdir from (first) code block
+    C = asarray(M.C, ids[1])
     O.logdir = C->O.logdir; O.logdir0 = C->O.logdir0
     // no preexisting version
     if (!asarray_contains(M.L, key)) {
-        M.update = `TRUE'
         L = &(`LOG'())
-        L->id = id
+        L->ids = ids
         L->O = O
+        L->save = `FALSE' // will be set by Weave_L()
         asarray(M.L, key, L)
+        M.update = `TRUE'
         return
     }
     // update preexisting version
     L = asarray(M.L, key)
+    L->save = `FALSE' // will be set by Weave_L()
     chflag = `FALSE'
-    if (C->log==NULL)                                            chflag = `TRUE'
+    if (L->ids!=ids) {
+        L->ids = ids
+                                                                 chflag = `TRUE'
+    }
+    if (!chflag) {
+        // check whether log of code block changed
+        if (C->log==NULL)                                        chflag = `TRUE'
+        // check remaining blocks if multiple blocks
+        if (!chflag) {
+            for (i=length(ids); i>1; i--) {
+                C = asarray(M.C, ids[i])
+                if (C->log==NULL) {
+                                                                 chflag = `TRUE'
+                    break
+                }
+            }
+        }
+    }
     if (L->O!=O) {
         if (!chflag) {
             if      ((L->O.code==`TRUE')!=(O.code==`TRUE'))      chflag = `TRUE'
@@ -1949,11 +2016,14 @@ void _Parse_L_store(`Main' M, `Str' id, `Lopt' O, `Str' key)
             else if  (L->O.cnp!=O.cnp)                           chflag = `TRUE'
             else if ((L->O.lnumbers==`TRUE')!=
                         (O.lnumbers==`TRUE'))                    chflag = `TRUE'
+            else if (O.lnumbers==`TRUE') {
+                if ((L->O.lcont==`TRUE')!=(O.lcont==`TRUE'))     chflag = `TRUE'
+            }
         }
         if (!chflag) {
             if (O.code==`TRUE') {
                 if ((L->O.verb==`TRUE')!=(O.verb==`TRUE'))       chflag = `TRUE'
-                if (O.verb!=`TRUE') {
+                else if (O.verb!=`TRUE') {
                     if (L->O.clsize!=O.clsize)                   chflag = `TRUE'
                 }
             }
@@ -1966,10 +2036,15 @@ void _Parse_L_store(`Main' M, `Str' id, `Lopt' O, `Str' key)
                 else if  (L->O.oom!=O.oom)                       chflag = `TRUE'
             }
         }
-        M.update = `TRUE'
         L->O = O
+        M.update = `TRUE'
     }
-    if (chflag) L->log = NULL
+    if (chflag) {
+        L->log = NULL
+        L->Lnum = `LNUM'()
+        L->lhs = L->rhs = J(0,1,"")
+        M.update = `TRUE'
+    }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1986,7 +2061,7 @@ void _Parse_L_store(`Main' M, `Str' id, `Lopt' O, `Str' key)
     id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     if (id!="") {
         if (!st_islmname(id)) {
-            _errtxt(sprintf("'%s' invalid name", id))
+            errprintf("'%s' invalid name\n", id)
             ErrorLines(F)
             exit(7)
         }
@@ -2014,7 +2089,7 @@ void _Parse_G(`Main' M, `Source' F, `Str' id, `Str' opts, `Bool' quietly)
     }
     // part must have at least one preceding code block
     if (!M.c) {
-        _errtxt("no preceding code block found within current part")
+        errprintf("no preceding code block found within current part\n")
         ErrorLines(F)
         exit(499)
     }
@@ -2024,7 +2099,7 @@ void _Parse_G(`Main' M, `Source' F, `Str' id, `Str' opts, `Bool' quietly)
         if (M.g) id = id + NumToLetter(M.g)
     }
     if (M.gkeys ? anyof(M.Gkeys[|1\M.gkeys|], id) : 0) {
-        _errtxt(sprintf("'%s' already taken; graph names must be unique", id))
+        errprintf("'%s' already taken; graph names must be unique\n", id)
         ErrorLines(F)
         exit(499)
     }
@@ -2075,11 +2150,11 @@ void _Parse_G_store(`Main' M, `Str' id, `Gopt' O, `StrC' fn, `Bool' nodo)
     // no preexisting version
     if (!asarray_contains(M.G, id)) {
         if (nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
-        M.update = `TRUE'
         G = &(`GRAPH'())
         G->fn = fn
         G->O = O
         asarray(M.G, id, G)
+        M.update = `TRUE'
         return
     }
     // update preexisting version
@@ -2186,12 +2261,12 @@ void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
     (void) M.i++ // inline expression counter
     if (id=="") id = (M.P.j>1 ? M.P.id[M.P.j] + M.punct : "") + strofreal(M.i)
     else if (!st_islmname(id)) {
-        _errtxt(sprintf("'%s' invalid name", id))
+        errprintf("'%s' invalid name\n", id)
         ErrorLines(F)
         exit(7)
     }
     if (M.ikeys ? anyof(M.Ikeys[|1\M.ikeys|], id) : 0) {
-        _errtxt(sprintf("'%s' already taken; inline expression names must be unique", id))
+        errprintf("'%s' already taken; inline expression names must be unique\n", id)
         ErrorLines(F)
         exit(499)
     }
@@ -2217,29 +2292,13 @@ void _Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
     tokenset(M.t1, exp)
     nm = tokenget(M.t1)
     if (anyof((M.Itag.log, M.Itag.lognm), nm)) {
-        id = TabTrim(tokenrest(M.t1))
-        if (id=="") {
-            id = M.lastL
-            if (id=="") {
-                _errtxt("no prior log found")
-                ErrorLines(F)
-                exit(499)
-            }
-        }
+        id = _Parse_I_immediate_id(F, tokenrest(M.t1), M.lastL, "log")
         if (nm==M.Itag.log) fwrite(M.tex.fh, M.Ttag.L + id + M.Ttag.Lend)
         else                fwrite(M.tex.fh, M.Ttag.L+"?" + id + M.Ttag.Lend)
         return
     }
     if (anyof((M.Itag.graph, M.Itag.graphnm), nm)) {
-        id = TabTrim(tokenrest(M.t1))
-        if (id=="") {
-            id = M.lastG
-            if (id=="") {
-                _errtxt(sprintf("no prior graph found", id))
-                ErrorLines(F)
-                exit(499)
-            }
-        }
+        id = _Parse_I_immediate_id(F, tokenrest(M.t1), M.lastG, "graph")
         if (nm==M.Itag.graph) fwrite(M.tex.fh, M.Ttag.G + id + M.Ttag.Gend)
         else                  fwrite(M.tex.fh, M.Ttag.G+"?" + id + M.Ttag.Gend)
         return
@@ -2249,6 +2308,25 @@ void _Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
         exit(rc)
     }
     fwrite(M.tex.fh, strtrim(st_local("sttex_value")))
+}
+
+`Str' _Parse_I_immediate_id(`Source' F, `Str' id, `Str' lastid, `Str' el)
+{
+    id = TabTrim(id)
+    if (id=="") {
+        id = lastid
+        if (id=="") {
+            errprintf("no prior %s found\n", el)
+            ErrorLines(F)
+            exit(499)
+        }
+    }
+    else if (!st_islmname(subinstr(id,".","_"))) {
+        errprintf("'%s' invalid name\n", id)
+        ErrorLines(F)
+        exit(7)
+    }
+    return(id)
 }
 
 // return position of tex comment; missing if not found
@@ -2275,19 +2353,19 @@ void _Parse_I_store(`Main' M, `Str' id, `Str' exp)
     // no preexisting version
     if (!asarray_contains(M.I, id)) {
         if (M.Copt.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
-        M.update = `TRUE'
         I = &(`INLINE'())
         I->cmd = &exp
         asarray(M.I, id, I)
+        M.update = `TRUE'
         return
     }
     // update preexisting version
     I = asarray(M.I, id)
     if (*I->cmd!=exp) {
         if (M.Copt.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE'
-        M.update = `TRUE'
         I->cmd = &exp
         I->log = NULL
+        M.update = `TRUE'
     }
 }
 
@@ -2342,13 +2420,13 @@ void Input(`Main' M, `Source' F)
     F.i0 = F.i
     fn = TabTrim(Get_Arg(M, "{", "}", F))
     if (fn=="") {
-        _errtxt("invalid syntax; {it:filename} required")
+        errprintf("invalid syntax; {it:filename} required\n")
         ErrorLines(F)
         exit(601)
     }
     if (!pathisabs(fn)) fn = pathjoin(M.srcdir, fn)
     if (!fileexists(fn)) {
-        _errtxt(sprintf("file %s not found", fn))
+        errprintf("file %s not found\n", fn)
         ErrorLines(F)
         exit(601)
     }
@@ -2364,22 +2442,21 @@ void Append(`Main' M, `Source' F)
     F.i0 = F.i
     fn = TabTrim(Get_Arg(M, "{", "}", F))
     if (fn=="") {
-        _errtxt("invalid syntax; {it:filename} required")
+        errprintf("invalid syntax; {it:filename} required\n")
         ErrorLines(F)
         exit(601)
     }
     if (!pathisabs(fn)) fn = pathjoin(M.srcdir, fn)
     if (!fileexists(fn)) {
-        _errtxt(sprintf("file %s not found", fn))
+        errprintf("file %s not found\n", fn)
         ErrorLines(F)
         exit(601)
     }
     opts = TabTrim(Get_Arg(M, "[", "]", F))
     if (!M.run) return
     S = Cat(fn)
-    if (opts!="") {
-        Striplog_subst(S, _parse_matchist_expand(_parse_matchlist(opts, 1)))
-    }
+    if (opts!="") _Format_subst(S,
+        _parse_matchist_expand(_parse_matchlist(opts, 1)))
     _Fput(M.tex.fh, S)
 }
 
@@ -2582,10 +2659,10 @@ void Collect_C_cert(`Main' M, `Code' C, `Str' id)
     }
     if (*C.log!=*C0->log) {
         display("")
-        _errtxt(sprintf("new version of log %s is different from previous version", id))
+        errprintf("new version of log %s is different from previous version\n", id)
         Collect_C_cert_di(*C.log, *C0->log)
         display("")
-        _errtxt("certification error")
+        errprintf("certification error\n")
         exit(499)
     }
     //printf("%s: certification successful\n", id)
@@ -2701,109 +2778,96 @@ void Collect_I(`Main' M, `Source' F, `Str' id)
 
 void Format(`Main' M)
 {
-    `Int'  i, n
-    `StrC' keys
-
-    keys = asarray_keys(M.L)
-    n = length(keys)
-    for (i=1; i<=n; i++) _Format(M, keys[i])
+    `Int' i
+    
+    // need to use subfunction so that pointer to S will be distinct
+    for (i=1; i<=M.lkeys; i++) _Format(M, M.Lkeys[i])
 }
 
 void _Format(`Main' M, `Str' id)
 {
     `pLog'  L
+    `StrC'  S;  `Unset' S
+    `pStrC' S0; `Unset' S0
+
+    // initialize
+    L = asarray(M.L, id)
+    L->save = `FALSE' // will be set by Weave_L()
+    // check whether log changed
+    if (L->log!=NULL) {
+        _Format_check_lnum(M, *L) // update line numbers counter
+        return
+    }
+    L->newlog = `TRUE'
+    // obtain raw log; S0 will contain pointer to raw log of (first) block
+    if (_Format_get_log(M, *L, S, S0)) return // exit if raw log not available
+    // basic formatting
+    if (L->O.code!=`TRUE') _Format_log(M, *L, S)  // results log
+    else                   _Format_clog(M, *L, S) // code log
+    // apply tags and substitutions
+    _Format_subst(S, L->O.subst)
+    _Format_alert(S, L->O.alert)
+    _Format_tag(S, L->O.tag)
+    // add line numbers, select range, apply line tags
+    _Format_lnum(S, *L, M.lnum)
+    // check whether log needs to be saved
+    if (S!=*S0) L->log = &S
+    else        L->log = S0
+}
+
+// copy raw logs from referenced code blocks; working from bottom to top such
+// that first block will be processed last (i.e. the function will return with
+// S0 set to the pointer off the raw log of the first code block)
+`Bool' _Format_get_log(`Main' M, `Log' L, `StrC' S, `pStrC' S0)
+{
+    `Int'   i
     `pCode' C
     
-    L = asarray(M.L, id)
-    L->save = `FALSE'     // save log on disc: initialize
-    C = asarray(M.C, L->id)
-    if (L->O.code!=`TRUE') Format_log(M, *L, *C)
-    else                   Format_clog(M, *L, *C)
+    // number of keys
+    i = length(L.ids)
+    // results log
+    if (L.O.code!=`TRUE') {
+        for (; i; i--) {
+            C = asarray(M.C, L.ids[i])
+            S0 = C->log
+            if (S0==NULL) return(1) // no log available
+            S = *S0 \ S
+        }
+        return(0)
+    }
+    // code log
+    for (; i; i--) {
+        C = asarray(M.C, L.ids[i])
+        S0 = C->cmd
+        S = *S0 \ S
+    }
+    return(0)
 }
 
-// add line numbers, select range, apply line tag
-void _Format_lnum(`StrC' f, `Bool' lnumbers, `IntR' range, `StrM' ltag)
+// check whether line numbers need updating (e.g. if order of elements changed
+// or locnt status changed for preceding elements); also updates M.lnum
+void _Format_check_lnum(`Main' M, `Log' L)
 {
-    `BoolC' tag
-    `IntC'  idx
+    `Int' r
     
-    // whether to do anything
-    if (lnumbers!=`TRUE') {
-        if (!length(range)) {
-            if (!rows(ltag)) return
+    if (L.O.lnumbers!=`TRUE') return
+    r = rows(L.Lnum.idx)
+    if (!r) return
+    if (L.O.lcont==`TRUE') {
+        if (L.Lnum.i0!=M.lnum) { // offset changed
+            L.Lnum.idx = L.Lnum.idx :+ (M.lnum - L.Lnum.i0)
+            L.Lnum.i0 = M.lnum
+            L.newlog = `TRUE'
+            M.update = `TRUE'
         }
     }
-    // generate line index
-    tag = !((f:=="\cnp") + (f:=="\oom") + (f:=="{\smallskip}"))
-    idx = runningsum(tag)
-    // add line numbers
-    if (lnumbers==`TRUE') _Format_lnum_lnum(f, tag, idx)
-    // select range
-    if (length(range)) _Format_lnum_range(f, tag, idx, range, rows(ltag)!=0)
-    // apply line tags
-    if (rows(ltag)) _Format_lnum_ltag(f, tag, idx, ltag)
+    M.lnum = L.Lnum.idx[r]
 }
 
-void _Format_lnum_lnum(`StrC' f, `BoolC' tag, `IntC' idx)
-{
-    `IntC'  p
-    `StrC'  lnum
-    
-    p    = select(1::rows(tag), tag)
-    lnum = strofreal(idx[p])
-    lnum = ((strlen(strofreal(idx[rows(idx)])) :- strlen(lnum)) :* " "
-            + lnum) :+ "  "
-    f[p] = lnum + f[p]
-}
-
-void _Format_lnum_range(`StrC' f, `BoolC' tag, `IntC' idx, `IntR' range,
-    `Bool' hasltag)
-{
-    `IntC'  p
-    
-    p = select(1::rows(idx), idx:>=range[1] :& idx:<=range[2])
-    f = f[p]
-    if (hasltag) {
-        tag = tag[p]
-        idx = idx[p]
-    }
-}
-
-void _Format_lnum_ltag(`StrC' f, `BoolC' tag, `IntC' idx, `StrM' ltag)
-{
-    `Int'  i, r, j, c, n
-    `IntR' lnum
-    `IntC' p
-
-    n = rows(idx)
-    if (!n) return
-    r = rows(ltag)
-    for (i=1;i<=r;i++) {
-        lnum = strtoreal(tokens(ltag[i,1]))
-        c = cols(lnum)
-        for (j=1;j<=c;j++) {
-            p = select(1::n, (idx:==lnum[j]) :& tag)
-            if (!length(p)) continue // no matching lines
-            f[p] = ltag[i,2] :+ f[p] :+ ltag[i,3]
-        }
-    }
-}
-
-// apply formatting options to log
-void Format_log(`Main' M, `Log' L, `Code' C)
-{
-    `StrC' S
-    
-    if (C.log==NULL) return // no log file available                            // not possible, is it?
-    if (L.log!=NULL) return // nothing changed; no need to process log
-    L.newlog = `TRUE'
-    Striplog(M, L, S = *C.log)
-    if (S!=*C.log) L.log = &S
-    else           L.log = C.log
-}
+// formatting of results log --------------------------------------------------
 
 // process log file
-void Striplog(`Main' M, `Log' L, `StrC' f)
+void _Format_log(`Main' M, `Log' L, `StrC' f)
 {
     `Bool'  inmata, hasoom
     `BoolC' p
@@ -2895,13 +2959,8 @@ void Striplog(`Main' M, `Log' L, `StrC' f)
     if (length(L.O.cnp))  Striplog_edit(L.O.cnp,  f, p, idx, 2)
     if (length(L.O.qui))  Striplog_edit(L.O.qui,  f, p, idx, 3)
     if (length(L.O.oom))  Striplog_edit(L.O.oom,  f, p, idx, 4)
-    // select relevant output and apply tags and substitutions
+    // select relevant output
     f = select(f, p)
-    Striplog_subst(f, L.O.subst)
-    Striplog_alert(f, L.O.alert)
-    Striplog_tag(f, L.O.tag)
-    // add line numbers, select range, apply line tag
-    _Format_lnum(f, L.O.lnumbers, L.O.range, L.O.ltag)
 }
 
 void Striplog_edit(`IntR' K, `StrC' f, `BoolC' p, `IntM' idx, `Int' opt)
@@ -2978,42 +3037,6 @@ void Striplog_insertrows(`StrC' f, `BoolC' p, `Int' i, `Int' n)
     else {
         p = p[|1 \ i|] \ J(n, 1, `TRUE') \ p[|i+1 \ .|]
         f = f[|1 \ i|] \ J(n, 1, "")     \ f[|i+1 \ .|]
-    }
-}
-
-// apply substitutions 
-void Striplog_subst(`StrC' f, `StrM' subst)
-{
-    `Int' i, k
-    
-    k = rows(subst)
-    if (!k) return
-    for (i=1; i<=k; i++) {
-        f = subinstr(f, subst[i,1], subst[i,2])
-    }
-}
-
-// add \alert{} to specified tokens
-void Striplog_alert(`StrC' f, `StrC' alert)                                     // also used by Append()!!
-{
-    `Int' i, k
-    
-    k = length(alert)
-    if (!k) return
-    for (i=1; i<=k; i++) {
-        f = subinstr(f, alert[i], "\alert{" + alert[i] + "}")
-    }
-}
-
-// add tags to specified tokens
-void Striplog_tag(`StrC' f, `StrM' tag)
-{
-    `Int' i, k
-    
-    k = rows(tag)
-    if (!k) return
-    for (i=1; i<=k; i++) {
-        f = subinstr(f, tag[i,1], tag[i,2] + tag[i,1] + tag[i,3])
     }
 }
 
@@ -3138,29 +3161,16 @@ void Striplog_tag(`StrC' f, `StrM' tag)
     return(res)
 }
 
-// code option: get copy of commands instead of output
-void Format_clog(`Main' M, `Log' L, `Code' C)
-{
-    `StrC' S
+// formatting of code log -----------------------------------------------------
 
-    if (L.log!=NULL) return // nothing changed; no need to process log
-    L.newlog = `TRUE'
-    _Format_clog(M, L, S = *C.cmd)
-    if (S!=*C.cmd) L.log = &S
-    else           L.log = C.cmd
-}
-
-// code option: apply formatting options to clog
+// apply formatting options to clog
 void _Format_clog(`Main' M, `Log' L, `StrC' f)
 {
-    if (L.O.verb!=`TRUE') f = Format_clog_texman(f, L.O.clsize, M.lognm)
-    _Format_lnum(f, L.O.lnumbers, L.O.range, L.O.ltag)
-    if (L.O.verb==`TRUE') f = "\begin{verbatim}" \ f \ "\end{verbatim}"
-    return // replace this with formatting routines
+    if (L.O.verb!=`TRUE') f = _Format_clog_texman(f, L.O.clsize, M.lognm)
 }
 
 // code option: process commands by log texman
-`StrC' Format_clog_texman(`StrC' S, `Int' linesize, `Str' lognm)
+`StrC' _Format_clog_texman(`StrC' S, `Int' linesize, `Str' lognm)
 {
     `Str' fn1, fn2, lsize, lsize0
     
@@ -3178,6 +3188,108 @@ void _Format_clog(`Main' M, `Log' L, `StrC' f)
     stata("qui log texman " + "`" + `"""' + fn2 + `"""' + "'" +
         "`" + `"""' + fn1 + `"""' + "'" + ", replace ll(" + lsize + ")")
     return(Cat(fn1))
+}
+
+// common formatting functions ------------------------------------------------
+
+// apply substitutions 
+void _Format_subst(`StrC' f, `StrM' subst) // also used by Append()
+{
+    `Int' i, k
+    
+    k = rows(subst)
+    if (!k) return
+    for (i=1; i<=k; i++) f = subinstr(f, subst[i,1], subst[i,2])
+}
+
+// add \alert{} to specified tokens
+void _Format_alert(`StrC' f, `StrC' alert)
+{
+    `Int' i, k
+    
+    k = length(alert)
+    if (!k) return
+    for (i=1; i<=k; i++) f = subinstr(f, alert[i], "\alert{"+alert[i]+"}")
+}
+
+// add tags to specified tokens
+void _Format_tag(`StrC' f, `StrM' tag)
+{
+    `Int' i, k
+    
+    k = rows(tag)
+    if (!k) return
+    for (i=1; i<=k; i++) f = subinstr(f, tag[i,1], tag[i,2]+tag[i,1]+tag[i,3])
+}
+
+// add select range, apply line numbers, apply line tags
+void _Format_lnum(`StrC' f, `Log' L, `Int' l0)
+{
+    `BoolC' tag
+    `IntC'  idx
+    
+    // whether to do anything
+    if (!length(L.O.range)) {
+        if (L.O.lnumbers!=`TRUE') {
+            if (!rows(L.O.ltag)) return
+        }
+    }
+    // generate line index
+    tag = !((f:=="\cnp") + (f:=="\oom") + (f:=="{\smallskip}"))
+    idx = runningsum(tag)
+    // select range (also updates tag and idx)
+    if (length(L.O.range)) _Format_lnum_range(f, tag, idx, L.O.range)
+    // add line numbers
+    if (L.O.lnumbers==`TRUE') _Format_lnum_lnum(tag, idx, L.Lnum, L.O.lcont, l0)
+    // apply line tags
+    if (rows(L.O.ltag)) _Format_lnum_ltag(tag, idx, L, L.O.ltag)
+}
+
+void _Format_lnum_range(`StrC' f, `BoolC' tag, `IntC' idx, `IntR' range)
+{
+    `IntC'  p
+    
+    p   = select(1::rows(idx), idx:>=range[1] :& idx:<=range[2])
+    f   = f[p]
+    tag = tag[p]
+    idx = idx[p]
+    if (rows(p)) {
+        if (idx[1]>1) idx = idx :- (idx[1]-1) // shift idx if necessary
+    }
+}
+
+void _Format_lnum_lnum(`BoolC' tag, `IntC' idx, `Lnum' Lnum, `Bool' lcont,
+    `Int' i0)
+{
+    if (lcont==`TRUE') Lnum.i0 = i0 // offset
+    else               Lnum.i0 = 0
+    if  (rows(tag)) {
+        Lnum.p   = select(1::rows(tag), tag)
+        Lnum.idx = idx[Lnum.p] :+ Lnum.i0
+        if (rows(Lnum.idx)) i0 = Lnum.idx[rows(Lnum.idx)] // update line counter
+    }
+}
+
+void _Format_lnum_ltag(`BoolC' tag, `IntC' idx, `Log' L, `StrM' ltag)
+{
+    `Int'  i, r, j, c, n
+    `IntR' lnum
+    `IntC' p
+
+    n = rows(idx)
+    L.lhs = L.rhs = J(n, 1, "")
+    if (!n) return
+    r = rows(ltag)
+    for (i=1;i<=r;i++) {
+        lnum = strtoreal(tokens(ltag[i,1]))
+        c = cols(lnum)
+        for (j=1;j<=c;j++) {
+            p = select(1::n, (idx:==lnum[j]) :& tag)
+            if (!length(p)) continue // no matching lines
+            L.lhs[p] = ltag[i,2] :+ L.lhs[p]
+            L.rhs[p] = L.rhs[p] :+ ltag[i,3]
+        }
+    }
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3252,16 +3364,15 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     // get id
     id = substr(s, a+l, b-1)
     l = a + l + b + strlen(M.Ttag.Lend) - 2
-    if (!asarray_contains(M.L, id)) { // no such id in database
-        fwrite(M.tgt.fh, substr(s, 1, l))
-        s = substr(s, l+1, .)
-        return
-    }
     // write start of line
     fwrite(M.tgt.fh, substr(s, 1, a-1))
     s = substr(s, l+1, .)
     // add log to LaTeX file
     L = asarray(M.L, id)
+    if (!length(L)) { // no such id in database
+        fwrite(M.tgt.fh, Weave_id_err(id, "log"))
+        return
+    }
     if (L->O.logdir0==".") fn = id + ".log.tex"
     else                   fn = pathjoin(L->O.logdir0, id) + ".log.tex"
     if (fnonly) { // if \stres{{logname}}: add filename only
@@ -3289,8 +3400,14 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     }
     if (L->O.nobegin!=`TRUE') {
         if (L->O.Begin=="") {
-            if (L->O.code==`TRUE' & L->O.verb==`TRUE')
-                fwrite(M.tgt.fh, "\begin{stverbatim}")
+            if (L->O.code==`TRUE') {
+                if (L->O.verb==`TRUE')
+                    fwrite(M.tgt.fh, "\begin{stverbatim}")
+                else if (L->O.beamer==`TRUE')
+                    fwrite(M.tgt.fh, "\begin{stlog}[beamer]")
+                else
+                    fwrite(M.tgt.fh, "\begin{stlog}")
+            }
             else if (L->O.beamer==`TRUE')
                 fwrite(M.tgt.fh, "\begin{stlog}[beamer]")
             else
@@ -3304,13 +3421,18 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     }
     else {
         fput(M.tgt.fh, "")
-        _Fput(M.tgt.fh, (L->log!=NULL ? *L->log :
-            ("(error: log not available)")))
+        _Fput(M.tgt.fh, Weave_L_log(*L))
     }
     if (L->O.noend!=`TRUE') {
         if (L->O.End=="") {
-            if (L->O.code==`TRUE' & L->O.verb==`TRUE')
-                fwrite(M.tgt.fh, "\end{stverbatim}")
+            if (L->O.code==`TRUE') {
+                if (L->O.verb==`TRUE')
+                    fwrite(M.tgt.fh, "\end{stverbatim}")
+                else if (L->O.beamer==`TRUE')
+                    fwrite(M.tgt.fh, "\end{stlog}")
+                else
+                    fwrite(M.tgt.fh, "\vskip\baselineskip\end{stlog}\vskip-\parskip")
+            }
             else if (L->O.beamer==`TRUE')
                 fwrite(M.tgt.fh, "\end{stlog}")
             else
@@ -3322,6 +3444,36 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, sprintf("\n\end{minipage}}"))
     }
     else if (L->O.blstretch<.) fwrite(M.tgt.fh, "}")
+}
+
+`StrC' Weave_L_log(`Log' L)
+{
+    `Int'  r
+    `StrC' S, lnum
+    
+    if (L.log==NULL) {
+        if (L.O.code==`TRUE') return("(error: log not available)")
+        return("(error: log not available)" \ "{\smallskip}")
+    }
+    S = *L.log
+    if (L.O.code==`TRUE' & L.O.verb==`TRUE') {
+        if (L.O.lnumbers==`TRUE') {
+            r = rows(L.Lnum.idx)
+            if (r) {
+                lnum = strofreal(L.Lnum.idx)
+                lnum = (strlen(lnum[r]) :- strlen(lnum)) :* " " + lnum
+                S[L.Lnum.p] = lnum :+ " " :+ S[L.Lnum.p]
+            }
+        }
+        if (rows(L.O.ltag)) S = L.lhs + S + L.rhs
+        S = "\begin{verbatim}" \ S \ "\end{verbatim}"
+    }
+    else {
+        if (L.O.lnumbers==`TRUE') S[L.Lnum.p] = 
+            ("\stlnum{":+strofreal(L.Lnum.idx):+"}") :+ S[L.Lnum.p]
+        if (rows(L.O.ltag)) S = L.lhs + S + L.rhs
+    }
+    return(S)
 }
 
 void Weave_G(`Main' M, `Str' s, `Int' a)
@@ -3348,16 +3500,15 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
     // get id
     id = substr(s, a+l, b-1)
     l = a + l + b + strlen(M.Ttag.Gend) - 2
-    if (!asarray_contains(M.G, id)) { // no such id in database
-        fwrite(M.tgt.fh, substr(s, 1, l))
-        s = substr(s, l+1, .)
-        return
-    }
     // write start of line
     fwrite(M.tgt.fh, substr(s, 1, a-1))
     s = substr(s, l+1, .)
     // add graph to LaTeX file
     G = asarray(M.G, id)
+    if (!length(G)) { // no such id in database
+        fwrite(M.tgt.fh, Weave_id_err(id, "graph"))
+        return
+    }
     if (G->O.dir0==".") fn = id
     else                fn = pathjoin(G->O.dir0, id)
     if (fnonly) { // if \stres{{graphname}}: add filename only (without suffix)
@@ -3366,7 +3517,7 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
     }
     if (G->O.center==`TRUE') fwrite(M.tgt.fh, "\begin{center}")
     if (fileexists(pathjoin(G->O.dir, id) + "." + G->O.as[1])==0) {
-        fwrite(M.tgt.fh, "\mbox{\tt (error:\ graph not available)}")
+        fwrite(M.tgt.fh, "\textbf{(error:\ graph not available)}")
     }
     else if (G->O.epsfig==`TRUE') {
         fwrite(M.tgt.fh, "\epsfig{file=" + fn +
@@ -3396,21 +3547,28 @@ void Weave_I(`Main' M, `Str' s, `Int' a)
         s = substr(s, a+l, .)
         return
     }
+    // get id
     id = substr(s, a+l, b-1)
     l = a + l + b + strlen(M.Ttag.Iend) - 2
-    // check whether id is available
-    if (!asarray_contains(M.I, id)) {
-        fwrite(M.tgt.fh, substr(s, 1, l))
-        s = substr(s, l+1, .)
-        return
-    }
     // write start of line
     fwrite(M.tgt.fh, substr(s, 1, a-1))
     s = substr(s, l+1, .)
     // add result to LaTeX file
     I = asarray(M.I, id)
+    if (!length(I)) { // no such id in database (cannot happen, can it?)
+        fwrite(M.tgt.fh, Weave_id_err(id, "result"))
+        return
+    }
     fwrite(M.tgt.fh, (I->log!=NULL ? *I->log : 
-        ("\mbox{\tt (error:\ result not available)}")))
+        ("\textbf{(error:\ result not available)}")))
+}
+
+`Str' Weave_id_err(`Str' id, `Str' el)
+{
+    `Str' msg
+    
+    msg = subinstr(id, "_", "\_")
+    return(sprintf("\\textbf{(error:\ %s %s not found)}", el, msg))
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3419,31 +3577,32 @@ void Weave_I(`Main' M, `Str' s, `Int' a)
 
 void External_logfiles(`Main' M)
 {
-    `Int'   i
+    `Int'   i, n
     `Str'   id, fn
     `StrC'  keys
     `BoolC' p
     `pLog'  L
     
-    keys = asarray_keys(M.L)
-    p = J(rows(keys), 1, `FALSE')
-    for (i=1; i<=length(keys); i++) {
+    keys = M.Lkeys
+    n = M.lkeys
+    p = J(n, 1, `FALSE')
+    for (i=1; i<=n; i++) {
         L = asarray(M.L, keys[i])
         if (L->O.statc==`TRUE') continue
         if (L->save==`TRUE') p[i] = `TRUE'
     }
     keys = select(keys, p)
-    if (length(keys)==0) return // nothing to do
-    for (i=1; i<=length(keys); i++) {
+    n = length(keys)
+    if (n==0) return // nothing to do
+    for (i=1; i<=n; i++) {
         id = keys[i]
-        L = asarray(M.L, keys[i])
+        L = asarray(M.L, id)
         fn = pathjoin(L->O.logdir, id) + ".log.tex"
         if (L->newlog!=`TRUE') {
             if (fileexists(fn)) continue
         }
         if (!direxists(L->O.logdir)) mkdir(L->O.logdir)
-        Fput(fn, (L->log!=NULL ? *L->log :
-            ("(error: log not available)" \ "{\smallskip}")))
+        Fput(fn, Weave_L_log(*L))
     }
 }
 
@@ -3453,25 +3612,27 @@ void External_logfiles(`Main' M)
 
 void External_dofiles(`Main' M)
 {
-    `Int'    i
+    `Int'    i, n
     `Str'    id, dir, fn
     `StrC'   keys
     `BoolC'  p
     `pCode'  C
 
     if (M.dosave==`FALSE') return // nothing to do
-    keys = asarray_keys(M.C)
-    p = J(rows(keys), 1, `FALSE')
-    for (i=1; i<=length(keys); i++) {
+    keys = M.Ckeys
+    n = M.ckeys
+    p = J(n, 1, `FALSE')
+    for (i=1; i<=n; i++) {
         C = asarray(M.C, keys[i])
         if (C->O.dosave!=`TRUE') continue
         p[i] = `TRUE'
     }
     keys = select(keys, p)
-    if (length(keys)==0) return // nothing to do
-    for (i=1; i<=length(keys); i++) {
+    n = length(keys)
+    if (n==0) return // nothing to do
+    for (i=1; i<=n; i++) {
         id = keys[i]
-        C = asarray(M.C, keys[i])
+        C = asarray(M.C, id)
         dir = C->O.dodir
         if (dir=="") dir = C->O.logdir
         fn = pathjoin(dir, id) + ".do"
@@ -3595,19 +3756,13 @@ void ErrorLines(`Source' F)
     `Int' i
     
     if (F.i0==F.i) {
-        _errtxt(sprintf("error on line %g in %s:", F.i, F.fn))
-        _errtxt(sprintf("    %s", F.S[F.i0]))
+        errprintf("error on line %g in %s:\n", F.i, F.fn)
+        errprintf("    %s\n", F.S[F.i0])
     }
     else {
-        _errtxt(sprintf("error on lines %g-%g in %s:", F.i0, F.i, F.fn))
-        for (i=F.i0; i<=F.i; i++) _errtxt(sprintf("    %s", F.S[i]))
+        errprintf("error on lines %g-%g in %s:\n", F.i0, F.i, F.fn)
+        for (i=F.i0; i<=F.i; i++) errprintf("    %s\n", F.S[i])
     }
-}
-
-// display error text in a way that also shows up if -quietly- is applied
-void _errtxt(`Str' s)
-{
-    stata("di as err " + "`" + `"""' + s + `"""' + "'")
 }
 
 // complement of B in A (elements in A that are not in B)
@@ -3724,7 +3879,7 @@ void Fexists(`Str' fn, `Bool' replace)
 {
     if (replace) return
     if (fileexists(fn)) {
-        _errtxt("file " + fn + " already exists")
+        errprintf("file %s already exists\n", fn)
         exit(602)
     }
 }
