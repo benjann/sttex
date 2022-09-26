@@ -29,6 +29,9 @@ Main changes:
            - use current version with care; still need to do some testing and
              bug fixing; database format may still change
 
+    26sep2022 (version 1.1.2):
+    - %STpart ignored -gropts()-; this is fixed
+
     26sep2022 (version 1.1.1):
     - \stlog{} can now obtain logs from multiple code blocks
     - log options tag(), alert(), and substitute() are now also applied to code logs

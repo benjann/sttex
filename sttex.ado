@@ -1,4 +1,4 @@
-*! version 1.1.1  26sep2022  Ben Jann
+*! version 1.1.2  26sep2022  Ben Jann
 
 program sttex
     version 11
@@ -1589,7 +1589,7 @@ void Part(`Main' M, `Str' s, `Source' F)
     M.P.l[M.P.j-1] = M.P.l[M.P.j] - M.P.l[M.P.j-1] // length of prev part
     // collect options
     _collect_do_options(M, M.Copt, opts, F)
-    _collect_graph_options(M, M.Gopt, st_local("options"), F)
+    _collect_graph_options(M, M.Gopt, st_local("gropts"), F)
 }
 
 /*---------------------------------------------------------------------------*/
