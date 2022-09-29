@@ -1,4 +1,4 @@
-*! version 1.1.2  26sep2022  Ben Jann
+*! version 1.1.3  29sep2022  Ben Jann
 
 program sttex
     version 11
@@ -706,7 +706,6 @@ struct `COPT' {
     `Int'       trim,       // max. levels of indentation to remove
                 linesize    // width of output log
     `Str'       logdir,     // path of log file
-                logdir0,    // include path for log file
                 dodir       // path of do file
 }
 
@@ -754,8 +753,7 @@ struct `LOPT' {
     `StrC'      alert       // enclose specified strings in \alert{}
     `Str'       Begin,      // environment begin, default: \begin{stlog}
                 End,        // environment end, default: \end{stlog}
-                logdir,     // path of log file
-                logdir0     // include path for log file
+                logdir      // path of log file
     `Int'       clsize      // linesize for (non-verbatim) code log
     `Real'      scale,      // rescaling factor
                 blstretch   // line spacing
@@ -776,7 +774,6 @@ struct `GOPT' {
     `Str'       name,      // name of graph window
                 override,  // override options for graph command
                 dir,       // path of graph files
-                dir0,      // include path for graph file
                 args       // arguments for \includegraphics
 }
 
@@ -1020,19 +1017,16 @@ void Process()
     // blank to the options so that the routines will run through even if no
     // options are specified; this ensures that the defaults will be set)
     _collect_do_options(M, M.Copt, st_local("options0")+" ", `SOURCE'())
-    _collect_log_options(M, M.Lopt, st_local("options")+" ", `SOURCE'())
-    _collect_graph_options(M, M.Gopt, st_local("gropts")+" ", `SOURCE'())
+    _collect_log_options(M.Lopt, st_local("options")+" ", `SOURCE'())
+    _collect_graph_options(M.Gopt, st_local("gropts")+" ", `SOURCE'())
     
     // code block options and graph options specified with %STinit
     _collect_do_options(M, M.Copt, st_local("options1"), `SOURCE'(), 1)
-    _collect_log_options(M, M.Lopt, st_local("options")+" ", `SOURCE'(), 1)
-    _collect_graph_options(M, M.Gopt, st_local("gropts"), `SOURCE'(), 1)
+    _collect_log_options(M.Lopt, st_local("options")+" ", `SOURCE'(), 1)
+    _collect_graph_options(M.Gopt, st_local("gropts"), `SOURCE'(), 1)
     
     // initialize logdir
-    if (M.Copt.logdir=="") {
-        M.Copt.logdir  = pathrmsuffix(M.tgt.fn)
-        M.Copt.logdir0 = pathrmsuffix(pathbasename(M.tgt.fn))
-    }
+    if (M.Copt.logdir=="") M.Copt.logdir = pathrmsuffix(pathbasename(M.tgt.fn))
     
     // input tags
     M.tag.st        = "%ST"
@@ -1101,7 +1095,7 @@ void Process()
         if (pathsuffix(M.db.fn)=="")
             M.db.fn = M.db.fn + pathsuffix(st_local("src")) + ".db"
         if (!pathisabs(M.db.fn))
-            M.db.fn = pathjoin(st_local("srcdir"), M.db.fn)
+            M.db.fn = pathjoin(M.srcdir, M.db.fn)
     }
     M.reset = (st_local("reset")!="")
     M.nodb  = (st_local("nodb")!="")
@@ -1146,28 +1140,17 @@ void _collect_do_options(`Main' M, `Copt' O, `Str' opts, `Source' F,
     if (st_local("trim2")!="")    O.trim     = strtoreal(st_local("trim2"))
     if (st_local("linesize")!="") O.linesize = strtoreal(st_local("linesize"))
     // logdir
-    if (st_local("logdir")!="") {
-        O.logdir0 = st_local("logdir")
-        if (pathisabs(O.logdir0)) O.logdir = O.logdir0
-        else if (O.logdir0==".")  O.logdir = M.tgtdir
-        else                      O.logdir = pathjoin(M.tgtdir, O.logdir0)
-    }
+    if (st_local("logdir")!="") O.logdir = st_local("logdir")
     // dodir
-    if (st_local("dodir")!="") {
-        O.dodir = st_local("dodir")
-        if (O.dodir==".")             O.dodir = M.tgtdir
-        else if (!pathisabs(O.dodir)) O.dodir = pathjoin(M.tgtdir, O.dodir)
-    }
+    if (st_local("dodir")!="")  O.dodir = st_local("dodir")
     // forced do
     if (O.nodo==`FALSE') M.P.run[M.P.j] = `TRUE'
 }
 
 // collect log options
-void _collect_log_options(`Main' M, `Lopt' O, `Str' opts, `Source' F,
-    | `Bool' init)
+void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
 {
     `Bool' rc
-    pragma unused M
     
     if (opts=="") return
     // run Stata parser
@@ -1215,8 +1198,7 @@ void _collect_log_options(`Main' M, `Lopt' O, `Str' opts, `Source' F,
 }
 
 // collect graph options
-void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F,
-    | `Bool' init)
+void _collect_graph_options(`Gopt' O, `Str' opts, `Source' F, | `Bool' init)
 {
     `Bool' rc
     
@@ -1239,12 +1221,7 @@ void _collect_graph_options(`Main' M, `Gopt' O, `Str' opts, `Source' F,
     if (st_local("gr_hasoverride")!="") O.override = st_local("gr_override")
     if (st_local("gr_hasargs")!="")     O.args     = st_local("gr_args")
     // grdir option
-    if (st_local("gr_dir")!="") {
-        O.dir0 = st_local("gr_dir")
-        if (pathisabs(O.dir0)) O.dir = O.dir0
-        else if (O.dir0==".")  O.dir = M.tgtdir
-        else                   O.dir = pathjoin(M.tgtdir, O.dir0)
-    }
+    if (st_local("gr_dir")!="") O.dir = st_local("gr_dir")
 }
 
 // collect on/off option
@@ -1394,7 +1371,7 @@ void DatabaseWrite(`Main' M)
     st_local("dbfile", M.db.fn)
     // open DB and write header
     M.db.fh = FOpen(M.db.fn, "w", "", 1)
-    fput(M.db.fh, "stTeX database version 1.1.1")
+    fput(M.db.fh, "stTeX database version 1.1.2")
     // write keys and associative arrays
     fputmatrix(M.db.fh, M.Ckeys); fputmatrix(M.db.fh, M.C)
     fputmatrix(M.db.fh, M.Lkeys); fputmatrix(M.db.fh, M.L)
@@ -1413,7 +1390,7 @@ void DatabaseWrite(`Main' M)
     if (!fileexists(M.db.fn)) return(0)
     // open DB and read header
     M.db.fh = FOpen(M.db.fn, "r")
-    if (fget(M.db.fh)!="stTeX database version 1.1.1") {
+    if (fget(M.db.fh)!="stTeX database version 1.1.2") {
         printf("{txt}(database %s not compatible; ", M.db.fn)
         printf("{txt}generating new database)\n")
         FClose(M.db.fh)
@@ -1589,7 +1566,7 @@ void Part(`Main' M, `Str' s, `Source' F)
     M.P.l[M.P.j-1] = M.P.l[M.P.j] - M.P.l[M.P.j-1] // length of prev part
     // collect options
     _collect_do_options(M, M.Copt, opts, F)
-    _collect_graph_options(M, M.Gopt, st_local("gropts"), F)
+    _collect_graph_options(M.Gopt, st_local("gropts"), F)
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1613,7 +1590,7 @@ void Part(`Main' M, `Str' s, `Source' F)
     // determine mode, parse id and options
     _Parse_C_opts(M, F, tag, id, quietly, mata, O)
     LO = M.Lopt
-    _collect_log_options(M, LO, st_local("options"), F)
+    _collect_log_options(LO, st_local("options"), F)
     // read code and process the block
     _Parse_C(M, id, mata, O, _Parse_C_read(M, F, tag))
     // create log instance
@@ -1695,7 +1672,7 @@ void Part(`Main' M, `Str' s, `Source' F)
     // determine mode, parse id and options
     _Parse_C_opts(M, F, tag, id, quietly, mata, O)
     LO = M.Lopt
-    _collect_log_options(M, LO, st_local("options"), F)
+    _collect_log_options(LO, st_local("options"), F)
     // read code and process the block
     _Parse_C(M, id, mata, O, _Parse_C_do_read(M, fn))
     // create log instance
@@ -1889,7 +1866,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     opts = TabTrim(Get_Arg(M, "{", "}", F, rc))
     if (rc) return(`FALSE')
     O = M.Lopt
-    _collect_log_options(M, O, opts, F)
+    _collect_log_options(O, opts, F)
     if (!M.run) return(`TRUE')
     _Parse_L(M, F, idlist, O, quietly)
     return(`TRUE')
@@ -1963,13 +1940,12 @@ void _Parse_L(`Main' M, `Source' F, `Str' idlist, `Lopt' O, `Bool' quietly)
 void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
 {
     `Bool'  chflag
-    `Int'   i
     `pLog'  L
     `pCode' C
     
     // get logdir from (first) code block
     C = asarray(M.C, ids[1])
-    O.logdir = C->O.logdir; O.logdir0 = C->O.logdir0
+    O.logdir = C->O.logdir
     // no preexisting version
     if (!asarray_contains(M.L, key)) {
         L = &(`LOG'())
@@ -1984,24 +1960,11 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
     L = asarray(M.L, key)
     L->save = `FALSE' // will be set by Weave_L()
     chflag = `FALSE'
+    // - check whether definition of log changed
     if (L->ids!=ids) {
-        L->ids = ids
-                                                                 chflag = `TRUE'
+        L->ids = ids;                                            chflag = `TRUE'
     }
-    if (!chflag) {
-        // check whether log of code block changed
-        if (C->log==NULL)                                        chflag = `TRUE'
-        // check remaining blocks if multiple blocks
-        if (!chflag) {
-            for (i=length(ids); i>1; i--) {
-                C = asarray(M.C, ids[i])
-                if (C->log==NULL) {
-                                                                 chflag = `TRUE'
-                    break
-                }
-            }
-        }
-    }
+    // - check whether options changed
     if (L->O!=O) {
         if (!chflag) {
             if      ((L->O.code==`TRUE')!=(O.code==`TRUE'))      chflag = `TRUE'
@@ -2039,12 +2002,36 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
         L->O = O
         M.update = `TRUE'
     }
+    // - check whether code block(s) changed
+    if (!chflag) {
+        if (_Parse_L_newcmd(M, ids, O.code==`TRUE'))             chflag = `TRUE'
+    }
+    // - clear log if there were changes
     if (chflag) {
         L->log = NULL
         L->Lnum = `LNUM'()
         L->lhs = L->rhs = J(0,1,"")
         M.update = `TRUE'
     }
+}
+
+`Bool' _Parse_L_newcmd(`Main' M, `StrC' ids, `Bool' code)
+{
+    `Int'   i
+    `pCode' C
+
+    if (code) {
+        for (i=length(ids); i; i--) {
+            C = asarray(M.C, ids[i])
+            if (C->newcmd==`TRUE') return(`TRUE')
+        }
+        return(`FALSE')
+    }
+    for (i=length(ids); i; i--) {
+        C = asarray(M.C, ids[i])
+        if (C->log==NULL) return(`TRUE')
+    }
+    return(`FALSE')
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2082,7 +2069,7 @@ void _Parse_G(`Main' M, `Source' F, `Str' id, `Str' opts, `Bool' quietly)
     
     // options
     O = M.Gopt
-    _collect_graph_options(M, O, opts, F)
+    _collect_graph_options(O, opts, F)
     if (length(O.as)==0) {
         if (O.epsfig==`TRUE') O.as = "eps"
         else                  O.as = "pdf"
@@ -2107,10 +2094,7 @@ void _Parse_G(`Main' M, `Source' F, `Str' id, `Str' opts, `Bool' quietly)
     // inherit do option and dir from preceding code block
     C = asarray(M.C, M.lastC)
     nodo = C->O.nodo
-    if (O.dir=="") {
-        O.dir0 = C->O.logdir0
-        O.dir  = C->O.logdir
-    }
+    if (O.dir=="") O.dir = C->O.logdir
     // prepare do-file
     if (nodo!=`TRUE') {
         fn = st_tempfilename(length(O.as))'
@@ -2144,7 +2128,7 @@ void _Parse_G_store(`Main' M, `Str' id, `Gopt' O, `StrC' fn, `Bool' nodo)
 {
     `Bool'   chflag
     `Int'    i
-    `StrC'   f
+    `StrC'   f, fold
     `pGraph' G
     
     // no preexisting version
@@ -2169,28 +2153,31 @@ void _Parse_G_store(`Main' M, `Str' id, `Gopt' O, `StrC' fn, `Bool' nodo)
         else if (G->O.name!=O.name)            chflag = `TRUE'
         // override() option changed
         else if (G->O.override!=O.override)    chflag = `TRUE'
-        // grdir changed
-        else if (G->O.dir!=O.dir) {
-            f = J(length(O.as), 1, "") 
-            for (i=1; i<=length(O.as); i++) {
-                f[i] = pathjoin(G->O.dir, id) + "." + O.as[i]
-                if (!fileexists(f[i])) {
-                    chflag = `TRUE'
-                    f = J(0, 1, "")
-                    break
+        // look for graph file(s)
+        else {
+            fold = J(0, 1, "")
+            for (i=length(O.as); i; i--) {
+                // look for gaph file in current graph folder
+                f = pathjoin(MkDir(M.tgtdir, O.dir), id)+"."+O.as[i]
+                if (!fileexists(f)) {
+                    if (G->O.dir==O.dir) {
+                        // graph file is missing
+                        chflag = `TRUE'
+                        break
+                    }
+                    // find graph file in old location
+                    f = pathjoin(MkDir(M.tgtdir, G->O.dir), id)+"."+O.as[i]
+                    if (!fileexists(f)) {
+                        // graph file is missing
+                        chflag = `TRUE'
+                        break
+                    }
+                    fold = fold \ f
                 }
             }
-            // copy files from old location
-            if (!chflag) Copy_GRfiles(f, O.dir, id, O.as, M.replace)
-        }
-        // graph file(s) missing
-        else {
-            for (i=1; i<=length(O.as); i++) {
-                f = pathjoin(O.dir, id) + "." + O.as[i]
-                if (!fileexists(f)) {
-                    chflag = `TRUE'
-                    break
-                }
+            if (!chflag & rows(fold)) {
+                // copy graph files from old location
+                Copy_GRfiles(fold, MkDir(M.tgtdir, O.dir), id, O.as, M.replace)
             }
         }
         if (chflag) M.P.run[M.P.j] = `TRUE'
@@ -2707,8 +2694,9 @@ void Collect_G(`Main' M, `Str' id)
     `pGraph' G
 
     G = asarray(M.G, id)
-    Copy_GRfiles(G->fn, G->O.dir, id, G->O.as, M.replace)
+    Copy_GRfiles(G->fn, MkDir(M.tgtdir, G->O.dir), id, G->O.as, M.replace)
 }
+
 void Copy_GRfiles(`StrC' fn, `Str' dir, `Str' name, `StrC' as, `Bool' r)
 {
     `Int' i, n
@@ -3373,15 +3361,15 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, Weave_id_err(id, "log"))
         return
     }
-    if (L->O.logdir0==".") fn = id + ".log.tex"
-    else                   fn = pathjoin(L->O.logdir0, id) + ".log.tex"
+    if (L->O.logdir==".") fn = id + ".log.tex"
+    else                  fn = pathjoin(L->O.logdir, id) + ".log.tex"
     if (fnonly) { // if \stres{{logname}}: add filename only
         fwrite(M.tgt.fh, fn)
         L->save = `TRUE' // need to save log on disc
         return
     }
     if (L->O.scale<.) {
-        fwrite(M.tgt.fh, "\par\noindent")
+        fwrite(M.tgt.fh, "\noindent")
         fput(M.tgt.fh, "\scalebox{"+sprintf("%g", L->O.scale)+"}{%")
         if (L->O.blstretch<.) {
             fput(M.tgt.fh, "\renewcommand{\baselinestretch}{"+
@@ -3395,7 +3383,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
              sprintf("%g", L->O.scale)+"}}%")
     }
     else if (L->O.blstretch<.) {
-        fput(M.tgt.fh, "{\renewcommand{\baselinestretch}{"+
+        fput(M.tgt.fh, "\begingroup\renewcommand{\baselinestretch}{"+
             sprintf("%g", L->O.blstretch)+"}%")
     }
     if (L->O.nobegin!=`TRUE') {
@@ -3443,7 +3431,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     if (L->O.scale<.) {
         fwrite(M.tgt.fh, sprintf("\n\end{minipage}}"))
     }
-    else if (L->O.blstretch<.) fwrite(M.tgt.fh, "}")
+    else if (L->O.blstretch<.) fwrite(M.tgt.fh, "\endgroup")
 }
 
 `StrC' Weave_L_log(`Log' L)
@@ -3509,14 +3497,14 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, Weave_id_err(id, "graph"))
         return
     }
-    if (G->O.dir0==".") fn = id
-    else                fn = pathjoin(G->O.dir0, id)
+    if (G->O.dir==".") fn = id
+    else               fn = pathjoin(G->O.dir, id)
     if (fnonly) { // if \stres{{graphname}}: add filename only (without suffix)
         fwrite(M.tex.fh, fn)
         return
     }
     if (G->O.center==`TRUE') fwrite(M.tgt.fh, "\begin{center}")
-    if (fileexists(pathjoin(G->O.dir, id) + "." + G->O.as[1])==0) {
+    if (!fileexists(pathjoin(MkDir(M.tgtdir, G->O.dir), id)+"."+G->O.as[1])) {
         fwrite(M.tgt.fh, "\textbf{(error:\ graph not available)}")
     }
     else if (G->O.epsfig==`TRUE') {
@@ -3578,7 +3566,7 @@ void Weave_I(`Main' M, `Str' s, `Int' a)
 void External_logfiles(`Main' M)
 {
     `Int'   i, n
-    `Str'   id, fn
+    `Str'   id, dir, fn
     `StrC'  keys
     `BoolC' p
     `pLog'  L
@@ -3597,13 +3585,21 @@ void External_logfiles(`Main' M)
     for (i=1; i<=n; i++) {
         id = keys[i]
         L = asarray(M.L, id)
-        fn = pathjoin(L->O.logdir, id) + ".log.tex"
+        dir = MkDir(M.tgtdir, L->O.logdir)
+        fn = pathjoin(dir, id) + ".log.tex"
         if (L->newlog!=`TRUE') {
             if (fileexists(fn)) continue
         }
-        if (!direxists(L->O.logdir)) mkdir(L->O.logdir)
+        if (!direxists(dir)) mkdir(dir)
         Fput(fn, Weave_L_log(*L))
     }
+}
+
+`Str' MkDir(`Str' tgtdir, `Str' dir)
+{
+    if (dir==".")         return(tgtdir)
+    if (!pathisabs(dir))  return(pathjoin(tgtdir, dir))
+    return(dir) // absolute path
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3635,6 +3631,7 @@ void External_dofiles(`Main' M)
         C = asarray(M.C, id)
         dir = C->O.dodir
         if (dir=="") dir = C->O.logdir
+        dir = MkDir(M.tgtdir, dir)
         fn = pathjoin(dir, id) + ".do"
         if (C->newcmd!=`TRUE') {
             if (fileexists(fn)) continue

@@ -1,5 +1,5 @@
 {smcl}
-{* 26sep2022}{...}
+{* 27sep2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -783,8 +783,8 @@
 {phang}
     {opt logdir(path)} specifies where to store the log file(s). {it:path} may be an
     absolute or relative path. The default is to store the file(s) in a subfolder
-    that has the same base name as the source file. Type {cmd:logdir(.)} to store
-    the file(s) directly in the folder of the source file without creating a
+    that has the same base name as the target file. Type {cmd:logdir(.)} to store
+    the file(s) directly in the folder of the target file without creating a
     subfolder. Type, for example, {cmd:logdir(log)}, to store the log file(s) in
     subfolder {cmd:log}. Whether a log file will be stored or not depends on
     situation (e.g. no file will be stored if log option {cmd:static} is specified).
@@ -793,7 +793,7 @@
     {opt dodir(path)} specifies where to store the do-file created by
     the {cmd:dosave} option. The default is to store the file in the same place
     as the log file(s). Type {cmd:dodir(.)} to store
-    the file directly in the folder of the source file. Type, for example,
+    the file directly in the folder of the target file. Type, for example,
     {cmd:dodir(do)}, to store the do-file in subfolder {cmd:do}.
 
 {dlgtab:Runtime options}
@@ -1053,7 +1053,7 @@
     {opt dir(path)} specifies where to store the graph files, where {it:path} is
     relative or absolute path. The default is to store the graph files in the same
     place as the log file(s). Type {cmd:dir(.)} to store
-    the graph files directly in the folder of the source file. Type, for example,
+    the graph files directly in the folder of the target file. Type, for example,
     {cmd:dir(graph)}, to store the do-file in subfolder {cmd:graph}.
 
 {dlgtab:Embedding}

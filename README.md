@@ -29,6 +29,20 @@ Main changes:
            - use current version with care; still need to do some testing and
              bug fixing; database format may still change
 
+    29sep2022 (version 1.1.3):
+    - tgtdir is now added on the fly to logdir, dodir, and graph dir when writing
+      files (if necessary) rather than setting up the paths upfront; this affects
+      the definition of objects in the database; dbversion now 1.1.2
+    - if graph dir() changed, sttex now also looks in new location for existing
+      graph files, not only the old location
+    - code log was regenerated if raw results log of code block was not available
+      (e.g. because option nodo was specified); code log is now only regenerated if
+      there is a change in the code irrespective of whether a raw results log is
+      available or not
+    - scale() no longer adds a \par in front of the block
+    - \blstretch() without scale() now encloses the log in \begingroup...\endgroup
+      rather than {...}
+
     26sep2022 (version 1.1.2):
     - %STpart ignored -gropts()-; this is fixed
 
