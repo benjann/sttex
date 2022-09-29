@@ -29,6 +29,11 @@ Main changes:
            - use current version with care; still need to do some testing and
              bug fixing; database format may still change
 
+    29sep2022 (version 1.1.4):
+    - the log files of a part were not updated correctly if a part did not contain
+      any changes but was evaluated due to dependencies; this is fixed;
+      dbversion now 1.1.4
+ 
     29sep2022 (version 1.1.3):
     - tgtdir is now added on the fly to logdir, dodir, and graph dir when writing
       files (if necessary) rather than setting up the paths upfront; this affects

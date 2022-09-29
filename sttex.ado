@@ -1,4 +1,4 @@
-*! version 1.1.3  29sep2022  Ben Jann
+*! version 1.1.4  29sep2022  Ben Jann
 
 program sttex
     version 11
@@ -683,6 +683,7 @@ struct `PARTS' {
 // structure for code blocks
 struct `CODE' {
     `Bool'      newcmd,     // whether commands changed
+                newlog,     // whether log was refreshed
                 mata        // is Mata code
     `Int'       trim        // size of trimmed indentation
     `Copt'      O           // settings and options
@@ -1371,7 +1372,7 @@ void DatabaseWrite(`Main' M)
     st_local("dbfile", M.db.fn)
     // open DB and write header
     M.db.fh = FOpen(M.db.fn, "w", "", 1)
-    fput(M.db.fh, "stTeX database version 1.1.2")
+    fput(M.db.fh, "stTeX database version 1.1.4")
     // write keys and associative arrays
     fputmatrix(M.db.fh, M.Ckeys); fputmatrix(M.db.fh, M.C)
     fputmatrix(M.db.fh, M.Lkeys); fputmatrix(M.db.fh, M.L)
@@ -1390,7 +1391,7 @@ void DatabaseWrite(`Main' M)
     if (!fileexists(M.db.fn)) return(0)
     // open DB and read header
     M.db.fh = FOpen(M.db.fn, "r")
-    if (fget(M.db.fh)!="stTeX database version 1.1.2") {
+    if (fget(M.db.fh)!="stTeX database version 1.1.4") {
         printf("{txt}(database %s not compatible; ", M.db.fn)
         printf("{txt}generating new database)\n")
         FClose(M.db.fh)
@@ -1800,7 +1801,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     if (!asarray_contains(M.C, id)) {
         if (O.nodo!=`TRUE') M.P.run[M.P.j] = `TRUE' // not forced nodo
         C = &(`CODE'())
-        C->newcmd = `TRUE'
+        C->newcmd = C->newlog = `TRUE'
         C->mata = mata
         C->trim = trim
         C->O = O
@@ -1811,7 +1812,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     }
     // update preexisting version
     C = asarray(M.C, id)
-    C->newcmd = `FALSE'
+    C->newcmd = C->newlog = `FALSE'
     chflag = `FALSE'
     // - hold on to previous cmd and log for certification
     if (O.certify==`TRUE') {
@@ -1822,7 +1823,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata, `Int' t
     }
     // - change in commands
     if (*C->cmd!=S) {
-        C->cmd = &S; C->newcmd = `TRUE';                        chflag = `TRUE'
+        C->cmd = &S; C->newcmd = C->newlog = `TRUE';            chflag = `TRUE'
     }
     // - change in type of code (Stata vs. Mata)
     else if (C->mata!=mata) {
@@ -1936,7 +1937,7 @@ void _Parse_L(`Main' M, `Source' F, `Str' idlist, `Lopt' O, `Bool' quietly)
     return(ids[|1 \ k|])
 }
 
-// update info on code block in database and determine whether code needs to be run
+// update info on log in database and determine whether log need to be refreshed
 void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
 {
     `Bool'  chflag
@@ -2002,36 +2003,18 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
         L->O = O
         M.update = `TRUE'
     }
-    // - check whether code block(s) changed
-    if (!chflag) {
-        if (_Parse_L_newcmd(M, ids, O.code==`TRUE'))             chflag = `TRUE'
-    }
     // - clear log if there were changes
     if (chflag) {
-        L->log = NULL
-        L->Lnum = `LNUM'()
-        L->lhs = L->rhs = J(0,1,"")
+        _Parse_L_clear(*L)
         M.update = `TRUE'
     }
 }
 
-`Bool' _Parse_L_newcmd(`Main' M, `StrC' ids, `Bool' code)
+void _Parse_L_clear(`Log' L)
 {
-    `Int'   i
-    `pCode' C
-
-    if (code) {
-        for (i=length(ids); i; i--) {
-            C = asarray(M.C, ids[i])
-            if (C->newcmd==`TRUE') return(`TRUE')
-        }
-        return(`FALSE')
-    }
-    for (i=length(ids); i; i--) {
-        C = asarray(M.C, ids[i])
-        if (C->log==NULL) return(`TRUE')
-    }
-    return(`FALSE')
+    L.log  = NULL
+    L.Lnum = `LNUM'()
+    L.lhs  = L.rhs = J(0,1,"")
 }
 
 /*---------------------------------------------------------------------------*/
@@ -2618,6 +2601,7 @@ void Collect_C(`Main' M, `Source' F, `Str' id)
     // apply texman and add pointer to database
     C = asarray(M.C, id)
     C->log = &(Apply_Texman(S, C->O.linesize))
+    C->newlog = `TRUE'
     // - certify
     if (C->O.certify==`TRUE') Collect_C_cert(M, *C, id)
 }
@@ -2781,7 +2765,9 @@ void _Format(`Main' M, `Str' id)
     // initialize
     L = asarray(M.L, id)
     L->save = `FALSE' // will be set by Weave_L()
-    // check whether log changed
+    // clear log if needs updating (because code block war evaluated)
+    if (L->log!=NULL) _Format_check_newlog(M, *L)
+    // exit if log does not need updating
     if (L->log!=NULL) {
         _Format_check_lnum(M, *L) // update line numbers counter
         return
@@ -2801,6 +2787,52 @@ void _Format(`Main' M, `Str' id)
     // check whether log needs to be saved
     if (S!=*S0) L->log = &S
     else        L->log = S0
+}
+
+// clear results log if raw log of code block was refreshed; clear code log if
+// commands in code block changed 
+void _Format_check_newlog(`Main' M, `Log' L)
+{
+    `Int'   i
+    `pCode' C
+
+    if (L.O.code!=`TRUE') {
+        for (i=length(L.ids); i; i--) {
+            C = asarray(M.C, L.ids[i])
+            if (C->newlog==`TRUE') {
+                _Parse_L_clear(L)
+                return
+            }
+        }
+        return
+    }
+    for (i=length(L.ids); i; i--) {
+        C = asarray(M.C, L.ids[i])
+        if (C->newcmd==`TRUE') {
+            _Parse_L_clear(L)
+            return
+        }
+    }
+}
+
+// check whether line numbers need updating (e.g. if order of elements changed
+// or locnt status changed for preceding elements); also updates M.lnum
+void _Format_check_lnum(`Main' M, `Log' L)
+{
+    `Int' r
+    
+    if (L.O.lnumbers!=`TRUE') return
+    r = rows(L.Lnum.idx)
+    if (!r) return
+    if (L.O.lcont==`TRUE') {
+        if (L.Lnum.i0!=M.lnum) { // offset changed
+            L.Lnum.idx = L.Lnum.idx :+ (M.lnum - L.Lnum.i0)
+            L.Lnum.i0 = M.lnum
+            L.newlog = `TRUE'
+            M.update = `TRUE'
+        }
+    }
+    M.lnum = L.Lnum.idx[r]
 }
 
 // copy raw logs from referenced code blocks; working from bottom to top such
@@ -2830,26 +2862,6 @@ void _Format(`Main' M, `Str' id)
         S = *S0 \ S
     }
     return(0)
-}
-
-// check whether line numbers need updating (e.g. if order of elements changed
-// or locnt status changed for preceding elements); also updates M.lnum
-void _Format_check_lnum(`Main' M, `Log' L)
-{
-    `Int' r
-    
-    if (L.O.lnumbers!=`TRUE') return
-    r = rows(L.Lnum.idx)
-    if (!r) return
-    if (L.O.lcont==`TRUE') {
-        if (L.Lnum.i0!=M.lnum) { // offset changed
-            L.Lnum.idx = L.Lnum.idx :+ (M.lnum - L.Lnum.i0)
-            L.Lnum.i0 = M.lnum
-            L.newlog = `TRUE'
-            M.update = `TRUE'
-        }
-    }
-    M.lnum = L.Lnum.idx[r]
 }
 
 // formatting of results log --------------------------------------------------
