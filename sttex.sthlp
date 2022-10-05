@@ -1,5 +1,5 @@
 {smcl}
-{* 27sep2022}{...}
+{* 05oct2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -147,10 +147,6 @@
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt gt}}remove continuation symbols; default is {cmd:gt}
     {p_end}
-{synopt:{opth drop(numlist)}}remove selected commands (and their output) from the log
-    {p_end}
-{synopt:{opth cnp(numlist)}}insert {cmd:\cnp} after selected commands
-    {p_end}
 {synopt:[{cmd:{ul:no}}]{opt lnum:bers}}add line numbers; requires definition of {cmd:\stlnum{}}
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt lcont:inue}}continue line numbers from prior log
@@ -161,24 +157,31 @@
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt pr:ompt}}remove command prompts; default is {cmd:prompt}
     {p_end}
+{synopt:{opth drop(numlist)}}remove selected commands and their output from the log
+    {p_end}
+{synopt:{opth cnp(numlist)}}insert {cmd:\cnp} after selected commands
+    {p_end}
 {synopt:{opth qui(numlist)}}remove output from selected commands
     {p_end}
 {synopt:{opth oom(numlist)}}replace output from selected commands by {cmd:\oom}
     {p_end}
 
 {syntab :Code log only}
-{synopt:[{cmd:{ul:no}}]{opt verb:atim}}use copy of code rather than code log;
-    default is {cmd:noverbatim}
+{synopt:{opt cl:size(#)}}set the line width used by {cmd:log texman}
     {p_end}
-{synopt:{opt cl:size(#)}}set the line width for the (non-verbatim) code log
+{synopt:[{cmd:{ul:no}}]{opt tex:man}}do not apply {cmd:log texman}; default is
+    {cmd:texman}
+    {p_end}
+{synopt:[{cmd:{ul:no}}]{opt verb:atim}}do not apply {cmd:log texman} and include
+    code in verbatim environment; default is {cmd:noverbatim}
     {p_end}
 
 {syntab :Embedding}
 {synopt:[{cmd:{ul:no}}]{opt stat:ic}}copy log into target document; default is {cmd:nostatic}
     {p_end}
-{synopt:[{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}]}specify custom begin tag for log
+{synopt:[{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}]}specify custom begin command for log
     {p_end}
-{synopt:[{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}]}specify custom end tag for log
+{synopt:[{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}]}specify custom end command for log
     {p_end}
 {synopt:[{cmd:no}]{opt beamer}}use begin tag for beamer class; default is {cmd:nobeamer}
     {p_end}
@@ -275,6 +278,7 @@
 
     Interpreted LaTeX comments
         {help sttex##target:Specify target file and overall options}
+        {help sttex##set:Set defaults for log environments}
         {help sttex##parts:Partition the file into sections}
         {help sttex##ignore:Ignore tags}
         {help sttex##remove:Remove input}
@@ -394,14 +398,13 @@
             {cmd:\stres}{cmd:[}{it:id}{cmd:]}{cmd:{c -(}}{it:{help display:display_directive}}{cmd:{c )-}}
 
 {pmore}
-    With this syntax, {cmd:\stres{}} will be evaluated at
-    runtime, i.e. when running the Stata commands found in the source
-    file. {cmd:\stres{}} will apply Stata's {helpb display} command
-    to {it:{help display:display_directive}} and then
-    replace the tag with the output. The output will be backed up for future
-    {cmd:sttex} passes, using {it:id} as an identifier. An automatic name
-    is assigned if {it:id} is omitted; the brackets do not have to be typed if
-    {it:id} is omitted.
+    With this syntax, {cmd:\stres{}} will be evaluated at runtime, i.e. when
+    running the Stata commands found in the source file. {cmd:\stres{}} will
+    apply Stata's {helpb display} command to {it:{help display:display_directive}}
+    and then replace the tag with the (first 255 characters of the) output. The
+    output will be backed up for future {cmd:sttex} passes, using {it:id} as an
+    identifier. An automatic name is assigned if {it:id} is omitted; the
+    brackets do not have to be typed if {it:id} is omitted.
 
 {pmore}
     Within {it:{help display:display_directive}} you can type {cmd:\%} instead of
@@ -436,7 +439,7 @@
 {pmore}
     Use this syntax for custom inclusion of a Stata log or a graph. This may be
     useful, for example, in combination with {cmd:\stgraph*{}}. {it:keyword}
-    is one of the following:
+    can be one of the following:
 
 {p2colset 14 24 26 2}{...}
 {p2col:{cmd:log}}add the log from Stata block named {it:id}; the log from the last
@@ -478,11 +481,11 @@
     where {it:idlist} is a space-separated list of the names of the blocks
     (the blocks must already exist; referencing a future block is not allowed). The last block
     will be used if {it:idlist} is omitted. The log created by {cmd:\stlog{}}
-    will be named {it:id}{cmd:.}{it:#}, where {it:id} is the name of the 
+    will be named {it:id}{cmd:.}{it:#}, where {it:id} is the name of the
     (first) code block referenced by {it:idlist} and where {it:#} is a counter.
 
 {pstd}
-    The {cmd:*} and {cmd:?} wildcards are allowed in {it:idlist}. For example, 
+    The {cmd:*} and {cmd:?} wildcards are allowed in {it:idlist}. For example,
     {cmd:\stlog[*]{}} will compile a log from all existing code blocks (in the
     order in which they appear in the document).
 
@@ -562,11 +565,53 @@
     within the first 50 lines of the source file. {it:tgtfile} and options
     specified with {cmd:%STinit} take precedence over options specified
     with {cmd:sttex}. {cmd:%STinit} must start at
-    the beginning of a line.
+    the beginning of a line; lines before {cmd:%STinit} will be ignored.
+
+{marker set}{...}
+{dlgtab:Set defaults for log environments}
 
 {pstd}
-    If {cmd:%STinit} is found among the first 50 lines of the
-    source file, lines before {cmd:%STinit} will be ignored.
+    To change the default LaTeX commands used to embed a log in the target
+    document, specify
+
+{p 8 15 2}
+    {cmd:%STset} {it:keyword} {it:begin} {it:end}
+
+{pstd}
+    where {it:keyword} selects the type of log to be affected and where
+    {it:begin} and {it:end} are the LaTeX commands defining the
+    environment. Enclose {it:begin} and {it:end} in double quotes if they
+    contain spaces. {it:keyword} can be one of the following:
+
+{p2colset 9 22 23 2}{...}
+{p2col:{cmd:log}}results log
+    {p_end}
+{p2col:{cmdab:logb:eamer}}results log with option {cmd:beamer}
+    {p_end}
+{p2col:{cmd:code}}code log
+    {p_end}
+{p2col:{cmdab:codeb:eamer}}code log with option {cmd:beamer}
+    {p_end}
+{p2col:{cmd:verb}}code log with option {cmd:verbatim}
+    {p_end}
+{p2col:{cmdab:verbb:eamer}}code log with options {cmd:verbatim} and {cmd:beamer}
+    {p_end}
+
+{pstd}
+    The initial settings are as follows:
+
+        {cmd:%STset log        \begin{stlog}         \end{stlog}}
+        {cmd:%STset logbeamer  \begin{stlog}[beamer] \end{stlog}}
+        {cmd:%STset code       \begin{stlog}         \end{stlog}}
+        {cmd:%STset codebeamer \begin{stlog}[beamer] \end{stlog}}
+        {cmd:%STset verb       \begin{stverbatim}    \end{stverbatim}}
+        {cmd:%STset verbbeamer \begin{stverbatim}    \end{stverbatim}}
+
+{pstd}
+    {cmd:%STset} must start at the beginning of a line. You may specify
+    {cmd:%STset} repeatedly to change the settings along the way. Log options
+    {cmd:begin()} and {cmd:end()} take precedence over the settings defined
+    by {cmd:%STset}.
 
 {marker parts}{...}
 {dlgtab:Partition the file into independent sections}
@@ -855,8 +900,8 @@
     where {help numlist:{it:numlist}} is a list of target line numbers, and {it:left} and
     {it:right} are strings to be added to the beginning and the end of each selected
     line, respectively. Enclose strings in double quotes if they contain
-    spaces. Specify {it:left} or {it:right} as {cmd:""} for empty string. {cmd:ltag()} is
-    applied at the end, after other formatting options have taken effect.
+    spaces. Specify {it:left} or {it:right} as {cmd:""} for empty string. {cmd:ltag()}
+    is applied after other formatting options have taken effect.
 
 {marker tag}{...}
 {phang}
@@ -892,18 +937,46 @@
     {cmd:alert()}.
 
 {phang}
-    [{cmd:{ul:no}}]{opt lb} specifies whether to remove line break comments ({cmd:/// ...})
+    [{cmd:no}]{opt lb} specifies whether to remove line break comments ({cmd:/// ...})
     from the command lines in the log. Default is {cmd:lb}, that is, to retain the
     line break comments.
 
 {phang}
-    [{cmd:{ul:no}}]{opt gt} specifies whether to remove continuation symbols ({cmd:> }) from the
+    [{cmd:no}]{opt gt} specifies whether to remove continuation symbols ({cmd:> }) from the
     command lines in the log. Default is {cmd:gt}, that is, to retain the
     continuation symbols.
 
+{phang}
+    [{cmd:no}]{opt lnumbers} specifies whether to add line numbers to the
+    log. Default is {cmd:nolnumbers}. Line numbers are added after
+    other formatting options have taken effect.
+
+{pmore}
+    The line numbers will be included in command {cmd:\stlnum{}}, which needs to
+    be defined in the preamble of the document. For example, define
+    {cmd:\stlnum{}} as {cmd:\def\stlnum#1{\makebox[0pt][r]{#1~}}} to print right
+    aligned-numbers on the left of the log. Line numbers will be added without
+    {cmd:\stlnum{}} if {cmd:verbatim} is specified (code log only).
+
+{phang}
+    [{cmd:no}]{opt lcontinue} specifies whether to continue
+    the line number counter from the prior log. Default is {cmd:nolcontinue}. Option
+    {cmd:continue} is relevant only if {cmd:lnumbers} has been specified.
+
+{dlgtab:Results log only}
+
+{phang}
+    [{cmd:no}]{opt commands} specifies whether to remove all command lines from the
+    results log. Default is {cmd:commands}, that is, to retain the command lines.
+
+{phang}
+    [{cmd:no}]{opt prompt} specifies whether to remove command prompts ({cmd:. }) from the
+    command lines in the results log. Default is {cmd:prompt}, that is, to retain the
+    command prompts.
+
 {marker drop}{...}
 {phang}
-    {opt drop(numlist)} removes the specified commands (and their output) from
+    {opt drop(numlist)} removes the specified commands and their output from
     the log. Positive integers in {help numlist:{it:numlist}} refer to the
     positions of the commands from the start, negative integers refer to positions
     from the end. The last command can also be address by {cmd:.} (missing).
@@ -921,35 +994,6 @@
     want to print a continued-on-next-page message, redefine {cmd:\cnp} as
     {cmd:\onnextpage}, e.g. by including {cmd:\let\cnp=\onnextpage} in the preamble
     of the document.
-
-{phang}
-    [{cmd:{ul:no}}]{opt lnumbers} specifies whether to add line numbers to the
-    log. Default is {cmd:nolnumbers}. Line numbers are added at the end, after
-    other formatting options have taken effect.
-
-{pmore}
-    The line numbers will be included in command {cmd:\stlnum{}}, which needs to
-    be defined in the preamble of the document. For example, define 
-    {cmd:\stlnum{}} as {cmd:\def\stlnum#1{\makebox[0pt][r]{#1~}}} to print right
-    aligned-numbers on the left of the log. An exception is when both {cmd:code}
-    and {cmd:verbatim} are specified; in this case the line numbers will be
-    added to the log as is.
-
-{phang}
-    [{cmd:{ul:no}}]{opt lcontinue} specifies whether to continue
-    the line number counter from the prior log. Default is {cmd:nolcontinue}. Option
-    {cmd:continue} is relevant only if {cmd:lnumbers} has been specified.
-
-{dlgtab:Results log only}
-
-{phang}
-    [{cmd:no}]{opt commands} specifies whether to remove all command lines from the
-    results log. Default is {cmd:commands}, that is, to retain the command lines.
-
-{phang}
-    [{cmd:{ul:no}}]{opt prompt} specifies whether to remove command prompts ({cmd:. }) from the
-    command lines in the results log. Default is {cmd:prompt}, that is, to retain the
-    command prompts.
 
 {marker qui}{...}
 {phang}
@@ -969,20 +1013,30 @@
 {dlgtab:Code log only}
 
 {phang}
-    [{cmd:{ul:no}}]{opt verbatim} specifies whether to use a verbatim copy of
-    code rather than a code log. Default is {cmd:noverbatim}, in which case the
-    code will be passed through {cmd:log texman} to create a code log. The {cmd:verbatim}
-    environment will be used to include the code in the target document if {cmd:verbatim}
-    is specified, which implies that LaTeX commands in the code will not be
-    interpreted when compiling the document.
-
-{phang}
     {opt clsize(#)} sets the line width (number of characters) to be used
     when passing the code through {cmd:log texman}, with {it:#} between 40 and
     255. The default is to use full line width, that is,
     {cmd:clsize(255)}. You may type {cmd:clsize(.)} to select this
-    default. The {cmd:clsize()} option has no effect if {cmd:verbatim}
-    is specified.
+    default. The {cmd:clsize()} option has no effect if {cmd:notexman} or
+    {cmd:verbatim} is specified.
+
+{phang}
+    [{cmd:no}]{opt texman} specifies whether to use a raw copy of
+    code rather than a code log. Default is {cmd:texman}, in which case the
+    code will be passed through {cmd:log texman} to create a code log. Specify
+    {cmd:notexman} to use a copy of the code without applying
+    {cmd:log texman}. Depending on situation, the resulting document may not
+    compile well in LaTeX if {cmd:notexman} is specified; it is left to the user
+    to embed the code in a way such that these errors do not occur. Alternatively,
+    specify option {cmd:verbatim} to enclose the code in a {cmd:verbatim} environment.
+
+{phang}
+    [{cmd:no}]{opt verbatim} specifies whether to enclose the code log in a
+    {cmd:verbatim} environment. The default is {cmd:noverbatim}. Option {cmd:verbatim}
+    implies {cmd:notexman}. Irrespective if {cmd:begin()}, {cmd:end()}, and the
+    settings by {helpb sttex##set:%STset}, the log will always be included in an
+    inner \begin{verbatim}...\end{verbatim} environment
+    if option {cmd:verbatim} is specified.
 
 {dlgtab:Embedding}
 
@@ -994,22 +1048,20 @@
     may lead to compilation issues unless the affected frame is declared as fragile.
 
 {phang}
-    [{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}] specifies the begin tag of the
-    environment used to embed the log in the latex file. The default begin tag
-    is {cmd:\begin{stlog}} (or {cmd:\begin{stverbatim}} in case of a code log with
-    option {cmd:verbatim}). Specify {cmd:nobegin} to omit the begin tag; specify
-    {opt begin(str)} to set the begin tag to {it:str}.
+    [{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}] specifies the begin command of the
+    environment used to embed the log in the LaTeX file. The default is as set by 
+    {helpb sttex##set:%STset}. Specify {cmd:nobegin} to omit the begin command; specify
+    {opt begin(str)} to set the begin command to {it:str}.
 
 {phang}
-    [{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}] specifies the end tag of the
-    environment used to embed the log in the latex file. The default end tag
-    is {cmd:\end{stlog}} (or {cmd:\end{stverbatim}} in case of a code log with
-    option {cmd:verbatim}). Specify {cmd:noend} to omit the end tag; specify
-    {opt end(str)} to set the end tag to {it:str}.
+    [{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}] specifies the end command of the
+    environment used to embed the log in the LaTeX file. The default is as set by 
+    {helpb sttex##set:%STset}. Specify {cmd:noend} to omit the end comamnd; specify
+    {opt end(str)} to set the end command to {it:str}.
 
 {phang}
-    [{cmd:no}]{opt beamer} specifies whether to set the default begin tag
-    to {cmd:\begin{stlog}[beamer]} rather than {cmd:\begin{stlog}}. Specify
+    [{cmd:no}]{opt beamer} selects the variant of the
+    begin and end commands defined by {helpb sttex##set:%STset}. Specify
     {cmd:beamer} if the target file is a beamer class document. Default is
     {cmd:nobeamer}.
 
@@ -1150,6 +1202,14 @@
 {pmore}
     Jann, B. (2022). sttex: Stata module to integrate Stata results into
     a LaTeX document. Available from {browse "http://github.com/benjann/sttex/"}.
+
+{pstd}
+    Also see:
+
+{pmore}
+    Jann, B. (2022). sttex – a new dynamic document command for Stata and
+    LaTeX. Presentation at the London Stata Conference 2022. Available from
+    {browse "http://ideas.repec.org/p/boc/lsug22/14.html"}.
 
 
 {marker alsosee}{...}

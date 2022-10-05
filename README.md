@@ -24,10 +24,15 @@ Installation from GitHub:
 
 Main changes:
 
-    notes: - some of the log options listed under "main" in the help file are
-             not implemented yet for code logs
-           - use current version with care; still need to do some testing and
-             bug fixing; database format may still change
+    05oct2022 (version 1.1.5)
+    - %STset implemented
+    - log option -notexman- added
+    - log options -nolb- and -nogt- now also applied to code logs
+    - commands without output could confuse the log parser in some situations;
+      this is fixed
+    - db on disk will no longer be updated if only options change that are not
+      relevant for determining whether elements need to be refreshed; realized size
+      of -trim- no longer stored in db; dbversion now 1.1.5
 
     29sep2022 (version 1.1.4):
     - the log files of a part were not updated correctly if a part did not contain
