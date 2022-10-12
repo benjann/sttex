@@ -14,15 +14,37 @@ to save computer time. It is also possible to partition a source file into
 independent sections, such that only the sections affected by changes will be
 executed.
 
+To install `sttex` from the SSC Archive, type
+
+    . ssc install sttex, replace
+
+in Stata. Stata version 11 or newer is required.
+
 ---
 
 Installation from GitHub:
 
-    . net install sttex, replace from(https://raw.githubusercontent.com/benjann/sttex/main/)
+    . net from https://raw.githubusercontent.com/benjann/sttex/main/
+    . net install sttex, replace
 
 ---
 
 Main changes:
+
+    12oct2022 (version 1.1.6)
+    - %STpart did not update the log options; this is fixed
+    - option -certify- caused error; this is fixed
+    - -certify- now looks at both the SMCL log as well as the log translated to plain
+      text and only returns error if both are different; this implies that a change
+      in linesize does not lead to certification error in most cases
+    - log option -nolskip- added (restore empty lines in code log)
+    - scale() option: \noindent and modification of \leftmargini now omitted if
+      -beamer- is specified
+    - scale() option: now writing simplified code if scale=1
+    - typesetting options other than -typeset- and -view- no longer cause typesetting
+    - extension vrb added to -cleanup-
+    - now storing original SMCL log in database; translation to TeX is now done on
+      the fly; dbversion now 1.1.6
 
     05oct2022 (version 1.1.5)
     - %STset implemented

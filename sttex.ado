@@ -1,4 +1,4 @@
-*! version 1.1.5  05oct2022  Ben Jann
+*! version 1.1.6  12oct2022  Ben Jann
 
 program sttex
     version 11
@@ -83,8 +83,9 @@ program Process, rclass
         if "`extract'"!="" local saving `"`savingextract'"'
     }
     local options1 `macval(options)'
-    local typeset `typeset' `typeset2' `view' `view2' `jobname' `cleanup' ///
-        `nobibtex' `bibtex' `nomakeindex' `makeindex'
+    local typeset `typeset' `typeset2' `view' `view2'
+    local typesetopts `jobname' `cleanup' `nobibtex' `bibtex' /*
+        */ `nomakeindex' `makeindex'
     mata: PrepareFilenames()
     // run main routine
     if "`extract'"!="" {
@@ -118,7 +119,7 @@ program Process, rclass
     di as txt `"(target file saved as {`link':`tgt'})"'
     // typeset
     if `"`typeset'"'!="" {
-        Typeset using `"`tgt'"', `typeset'
+        Typeset using `"`tgt'"', `typeset' `typesetopts'
     }
     // returns
     if `"`dbfile'"'!="" {
@@ -206,7 +207,7 @@ end
 
 program _collect_log_options
     local opts CODE LB GT LNUMbers LCONTinue COMmands PRompt /*
-        */ TEXman VERBatim STATic BEGIN END BEAMER
+        */ LSkip TEXman VERBatim STATic BEGIN END BEAMER
     foreach o of local opts {
         local noopts `noopts' NO`o'
     }
@@ -216,6 +217,7 @@ program _collect_log_options
         tag(str asis) ///
         alert(str asis) ///
         SUBStitute(str asis) ///
+        LNUMbers2(passthru) ///
         drop(numlist int missingokay) ///
         cnp(numlist int missingokay) ///
         qui(numlist int missingokay) ///
@@ -235,8 +237,9 @@ program _collect_log_options
             local range `range' .
         }
     }
-    if `"`begin2'"'!="" local begin begin
-    if `"`end2'"'!=""   local end   end
+    if `"`lnumbers2'"'!=""  local lnumbers lnumbers
+    if `"`begin2'"'!=""     local begin begin
+    if `"`end2'"'!=""       local end   end
     foreach o of local opts {
         local opt = strlower("`o'")
         if "``opt''"!="" & "`no`opt''"!="" {
@@ -259,6 +262,15 @@ program _collect_log_options
     c_local end2       `"`macval(end2)'"'
     c_local scale      `scale'
     c_local blstretch  `blstretch'
+    // handle lsuffix
+    if `"`lnumbers2'"'!="" {
+        local 0 `", `lnumbers2'"'
+        syntax [, lnumbers2(str) ]
+        local haslsuffix haslsuffix
+        c_local haslsuffix haslsuffix
+    }
+    c_local lnumbers2  `"`macval(lnumbers2)'"'
+    c_local haslsuffix `haslsuffix'
 end
 
 program _collect_graph_options
@@ -381,7 +393,7 @@ program Typeset
             }
             capt erase `"`jobname'.idx"'
             if `success' & "`cleanup'"!="" {
-                local exts log aux toc lof lot out nav snm blg bbl ilg ind
+                local exts aux bbl blg ilg ind lof log lot nav out snm toc vrb
                 foreach s of local exts {
                     capture erase `"`jobname'.`s'"'
                 }
@@ -589,7 +601,8 @@ struct `MAIN' {
                 L,          // associative array for logs
                 G,          // associative array for graphs
                 I,          // associative array for inline expressions
-                Lcnt        // log counter (number of logs per code block)
+                Lcnt,       // log counter (number of logs per code block)
+                Ltex        // tex-formated log of code block
     `StrC'      Ckeys, Ckeys0,  // keys of code blocks
                 Lkeys, Lkeys0,  // keys of logs
                 Gkeys, Gkeys0,  // keys of graphs
@@ -701,13 +714,14 @@ struct `CODE' {
                 mata        // is Mata code
     `Copt'      O           // settings and options
     `pStrC'     cmd,        // commands
-                log         // LaTeX log
+                log         // smcl log
 }
 
 // structure of code blocks for certfication
 struct `CODE0' {
     `pStrC'     cmd,        // commands
-                log         // LaTeX log
+                log         // smcl log
+    `Int'       linesize    // width of output log
 }
 
 // struct for code block options
@@ -751,6 +765,7 @@ struct `LOPT' {
                 lcont,      // continued line numbers
                 nocommands, // strip commands from log
                 noprompt,   // strip command prompt
+                nolskip,    // do not replace blank lines in code log
                 notex,      // do not apply log texman to code log
                 verb,       // enclode codel log in verbatim environment
                 statc,      // copy log into LaTeX file 
@@ -768,7 +783,8 @@ struct `LOPT' {
     `StrC'      alert       // enclose specified strings in \alert{}
     `Str'       Begin,      // environment begin
                 End,        // environment end
-                logdir      // path of log file
+                logdir,     // path of log file
+                lsuffix     // suffix for line numbers
     `Int'       clsize      // linesize for (non-verbatim) code log
     `Real'      scale,      // rescaling factor
                 blstretch   // line spacing
@@ -1028,6 +1044,9 @@ void Process()
     M.dosave = `FALSE'
     M.punct = "_"
     
+    // default for lsuffix
+    M.Lopt.lsuffix = ": "
+    
     // code block options and graph options specified with sttex (adding a
     // blank to the options so that the routines will run through even if no
     // options are specified; this ensures that the defaults will be set)
@@ -1133,7 +1152,9 @@ void Process()
         M.G = asarray_create()
         M.I = asarray_create()
     }
+    M.C0   = asarray_create()
     M.Lcnt = asarray_create()
+    M.Ltex = asarray_create()
     return(M)
 }
 
@@ -1193,6 +1214,7 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     _collect_onoff_option("lcontinue" , O.lcont)
     _collect_onoff_option("nocommands", O.nocommands)
     _collect_onoff_option("noprompt"  , O.noprompt)
+    _collect_onoff_option("nolskip"   , O.nolskip)
     _collect_onoff_option("notexman"  , O.notex)
     _collect_onoff_option("verbatim"  , O.verb)
     _collect_onoff_option("static"    , O.statc)
@@ -1209,9 +1231,11 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     if (st_local("cnp")!="")   O.cnp   = strtoreal(tokens(st_local("cnp")))
     if (st_local("qui")!="")   O.qui   = strtoreal(tokens(st_local("qui")))
     if (st_local("oom")!="")   O.oom   = strtoreal(tokens(st_local("oom")))
+    // suffix for line numbers: set to empty string if specified as ""
+    if (st_local("haslsuffix")!="") O.lsuffix = st_local("lnumbers2")
     // string options ("" if not specified)
-    if (st_local("begin2")!="")     O.Begin = st_local("begin2")
-    if (st_local("end2")!="")       O.End   = st_local("end2")
+    if (st_local("begin2")!="")     O.Begin   = st_local("begin2")
+    if (st_local("end2")!="")       O.End     = st_local("end2")
     // multivalues string options (J(1,0,"") if not specified)
     if (st_local("alert")!="")      O.alert = tokens(st_local("alert"))'
     // dictionary string options (J(0,0,"") if not specified)
@@ -1397,7 +1421,7 @@ void DatabaseWrite(`Main' M)
     st_local("dbfile", M.db.fn)
     // open DB and write header
     M.db.fh = FOpen(M.db.fn, "w", "", 1)
-    fput(M.db.fh, "stTeX database version 1.1.5")
+    fput(M.db.fh, "stTeX database version 1.1.6")
     // write keys and associative arrays
     fputmatrix(M.db.fh, M.Ckeys); fputmatrix(M.db.fh, M.C)
     fputmatrix(M.db.fh, M.Lkeys); fputmatrix(M.db.fh, M.L)
@@ -1416,7 +1440,7 @@ void DatabaseWrite(`Main' M)
     if (!fileexists(M.db.fn)) return(0)
     // open DB and read header
     M.db.fh = FOpen(M.db.fn, "r")
-    if (fget(M.db.fh)!="stTeX database version 1.1.5") {
+    if (fget(M.db.fh)!="stTeX database version 1.1.6") {
         printf("{txt}(database %s not compatible; ", M.db.fn)
         printf("{txt}generating new database)\n")
         FClose(M.db.fh)
@@ -1471,19 +1495,19 @@ void ParseSrc(`Main' M, `Source' F)
         s = tokenget(M.t1)
         if (substr(s,1,3)==M.tag.st) {
             if (s==M.tag.part) {
-                Part(M, F)
+                Parse_Part(M, F)
                 continue
             }
             if (s==M.tag.set) {
-                Set(M, F)
+                Parse_Set(M, F)
                 continue
             }
             if (s==M.tag.ignore) { 
-                if (Ignore(M, F)) break
+                if (Parse_Ignore(M, F)) break
                 continue
             }
             if (s==M.tag.remove) { 
-                if (Remove(M, F)) break
+                if (Parse_Remove(M, F)) break
                 continue
             }
             Parse_I(M, F)
@@ -1510,11 +1534,11 @@ void ParseSrc(`Main' M, `Source' F)
             if (Parse_G(M, F, `TRUE')) continue
         }
         else if (s==M.tag.stinput) {
-            Input(M, F)
+            Parse_Input(M, F)
             continue
         }
         else if (s==M.tag.stappend) {
-            Append(M, F)
+            Parse_Append(M, F)
             continue
         }
         else if (substr(s,1,strlen(M.tag.stdo))==M.tag.stdo) {
@@ -1545,18 +1569,19 @@ void _AppendElement(transmorphic colvector v, `Int' j, transmorphic scalar el)
 /* function to handle parts                                                  */
 /*---------------------------------------------------------------------------*/
 
-void Part(`Main' M, `Source' F)
+void Parse_Part(`Main' M, `Source' F)
 {
     `Str' id, pid, tok, opts
     
     // collect id and pid
+    F.i0 = F.i
     if ((tok=tokenget(M.t1))!="") {
         if (tok!=",") {
             id = tok
             if (id==".") id = ""
             else if (!st_islmname(id)) {
                 errprintf("'%s' invalid name\n", id)
-                F.i0 = F.i; ErrorLines(F)
+                ErrorLines(F)
                 exit(7)
             }
             tok = tokenget(M.t1)
@@ -1566,7 +1591,7 @@ void Part(`Main' M, `Source' F)
             if (pid!="." & pid!="") {
                 if (!st_islmname(pid)) {
                     errprintf("'%s' invalid name\n", pid)
-                    F.i0 = F.i; ErrorLines(F)
+                    ErrorLines(F)
                     exit(7)
                 }
             }
@@ -1575,14 +1600,14 @@ void Part(`Main' M, `Source' F)
         if (tok==",") opts = tokenrest(M.t1)
         else if (tok!="") {
             errprintf("'%s' not allowed\n", tok)
-            F.i0 = F.i; ErrorLines(F)
+            ErrorLines(F)
             exit(499)
         }
     }
     if (id=="") id = strofreal(M.P.j) // j is offet by one (j=1 for part 0)
     if (anyof(M.P.id[|1\M.P.j|], id)) {
         errprintf("'%s' already taken; part names must be unique\n", id)
-        F.i0 = F.i; ErrorLines(F)
+        ErrorLines(F)
         exit(499)
     }
     // initialize part
@@ -1594,6 +1619,7 @@ void Part(`Main' M, `Source' F)
     M.P.l[M.P.j-1] = M.P.l[M.P.j] - M.P.l[M.P.j-1] // length of prev part
     // collect options
     _collect_do_options(M, M.Copt, opts, F)
+    _collect_log_options(M.Lopt, st_local("options"), F)
     _collect_graph_options(M.Gopt, st_local("gropts"), F)
 }
 
@@ -1601,7 +1627,7 @@ void Part(`Main' M, `Source' F)
 /* function to %STset                                                        */
 /*---------------------------------------------------------------------------*/
 
-void Set(`Main' M, `Source' F)
+void Parse_Set(`Main' M, `Source' F)
 {
     `Int'  l, i
     `Str'  tag
@@ -1887,6 +1913,7 @@ void _Parse_C_store(`Main' M, `Str' id, `Copt' O, `StrC' S, `Bool' mata)
         C0 = &(`CODE0'())
         C0->cmd = C->cmd
         C0->log = C->log
+        C0->linesize = C->O.linesize
         asarray(M.C0, id, C0)
     }
     // - change in commands
@@ -2083,7 +2110,9 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
                 if ((L->O.notex==`TRUE')!=(O.notex==`TRUE'))     chflag = `TRUE'
                 else if ((L->O.verb==`TRUE')!=(O.verb==`TRUE'))  chflag = `TRUE'
                 else if (O.verb!=`TRUE' & O.notex!=`TRUE') {
-                    if (L->O.clsize!=O.clsize)                   chflag = `TRUE'
+                    if       (L->O.clsize!=O.clsize)             chflag = `TRUE'
+                    else if ((L->O.nolskip==`TRUE')!=(O.nolskip==`TRUE'))
+                                                                 chflag = `TRUE'
                 }
             }
             else {
@@ -2442,7 +2471,7 @@ void _Parse_I_store(`Main' M, `Str' id, `Str' exp)
 /*---------------------------------------------------------------------------*/
 
 // handle STignore; returns 1 if \endinput encountered
-`Bool' Ignore(`Main' M, `Source' F)
+`Bool' Parse_Ignore(`Main' M, `Source' F)
 {
     `Int' l
     `Str' tok
@@ -2462,7 +2491,7 @@ void _Parse_I_store(`Main' M, `Str' id, `Str' exp)
 }
 
 // handle STremove; returns 1 if \endinput encountered
-`Bool' Remove(`Main' M, `Source' F)
+`Bool' Parse_Remove(`Main' M, `Source' F)
 {
     `Int' l
     `Str' tok
@@ -2481,7 +2510,7 @@ void _Parse_I_store(`Main' M, `Str' id, `Str' exp)
 }
 
 // handle \stinput{} => nested call to ParseSrc()
-void Input(`Main' M, `Source' F)
+void Parse_Input(`Main' M, `Source' F)
 {
     `Str'  fn
     
@@ -2502,7 +2531,7 @@ void Input(`Main' M, `Source' F)
 }
 
 // handle \stappend{}
-void Append(`Main' M, `Source' F)
+void Parse_Append(`Main' M, `Source' F)
 {
     `Str'  fn, opts
     `StrC' S
@@ -2698,7 +2727,7 @@ void Collect_C(`Main' M, `Source' F, `Str' id)
     else S = J(0, 1, "")
     // apply texman and add pointer to database
     C = asarray(M.C, id)
-    C->log = &(Apply_Texman(S, C->O.linesize))
+    C->log = &S
     C->newlog = `TRUE'
     // - certify
     if (C->O.certify==`TRUE') Collect_C_cert(M, *C, id)
@@ -2708,6 +2737,7 @@ void Collect_C(`Main' M, `Source' F, `Str' id)
 void Collect_C_cert(`Main' M, `Code' C, `Str' id)
 {
     `pCode0' C0
+    `StrC'   L0, L1
     
     if (!asarray_contains(M.C0, id)) {
         printf("(%s: no previous log available; certification skipped)\n", id)
@@ -2719,7 +2749,7 @@ void Collect_C_cert(`Main' M, `Code' C, `Str' id)
         return
     }
     if (*C.cmd!=*C0->cmd) {
-        printf("(%s: commands changed; certification skipped)\n", id)
+        printf("(%s: code changed; certification skipped)\n", id)
         return
     }
     if (C.log==C0->log) {
@@ -2727,14 +2757,19 @@ void Collect_C_cert(`Main' M, `Code' C, `Str' id)
         return
     }
     if (*C.log!=*C0->log) {
-        display("")
-        errprintf("new version of log %s is different from previous version\n", id)
-        Collect_C_cert_di(*C.log, *C0->log)
-        display("")
-        errprintf("certification error\n")
-        exit(499)
+        L0 = Translate_to_txt(*C0->log, C0->linesize)
+        L1 = Translate_to_txt(*C.log, C.O.linesize)
+        if (L1!=L0) {
+            stata("set linesize 255") // linesize will be restored at end
+            display("")
+            errprintf("new version of log %s is different from previous version\n", id)
+            Collect_C_cert_di(L1, L0)
+            display("")
+            errprintf("certification error\n")
+            exit(499)
+        }
     }
-    //printf("%s: certification successful\n", id)
+    printf("(%s: certification successful)\n", id)
 }
 
 // compare logs and display (first) difference
@@ -2839,6 +2874,22 @@ void Collect_I(`Main' M, `Source' F, `Str' id)
     else            lsize = strofreal(st_numscalar("c(linesize)"))
     stata("qui log texman " + "`" + `"""' + fn1 + `"""' + "'" +
         "`" + `"""' + fn2 + `"""' + "'" + ", replace ll(" + lsize + ")")
+    return(Cat(fn2))
+}
+
+// translate log from smcl to text
+`StrC' Translate_to_txt(`StrC' S, `Int' linesize)
+{
+    `Str' fn1, fn2, lsize
+    
+    fn1 = st_tempfilename()
+    fn2 = st_tempfilename()
+    Fput(fn1, S)
+    if (linesize<.) lsize = strofreal(linesize)
+    else            lsize = strofreal(st_numscalar("c(linesize)"))
+    stata("qui translate " + "`" + `"""' + fn1 + `"""' + "'" +
+        "`" + `"""' + fn2 + `"""' + "'" + 
+        ", replace translator(smcl2log) linesize(" + lsize + ")")
     return(Cat(fn2))
 }
 
@@ -2947,7 +2998,7 @@ void _Format_check_lnum(`Main' M, `Log' L)
     if (L.O.code!=`TRUE') {
         for (; i; i--) {
             C = asarray(M.C, L.ids[i])
-            S0 = C->log
+            S0 = _Format_get_log_tex(M, *C, L.ids[i])
             if (S0==NULL) return(1) // no log available
             S = *S0 \ S
         }
@@ -2960,6 +3011,18 @@ void _Format_check_lnum(`Main' M, `Log' L)
         S = *S0 \ S
     }
     return(0)
+}
+
+// translate SMCL log to tex
+`pStrC' _Format_get_log_tex(`Main' M, `Code' C, `Str' id)
+{
+    `pStrC' S
+    
+    if (asarray_contains(M.Ltex, id)) return(asarray(M.Ltex, id))
+    if (C.log==NULL) return(NULL)
+    S = &(Apply_Texman(*C.log, C.O.linesize))
+    asarray(M.Ltex, id, S)
+    return(S)
 }
 
 // formatting of results log --------------------------------------------------
@@ -3278,7 +3341,28 @@ void _Format_clog(`Main' M, `Log' L, `StrC' S)
     if (L.O.nolb==`TRUE') _Format_clog_nolb(M, S)
     if (L.O.verb!=`TRUE' & L.O.notex!=`TRUE') {
         S = _Format_clog_texman(S, L.O.clsize, M.lognm)
-        if (L.O.nogt==`TRUE') _Format_clog_nogt(S)
+        if (L.O.nogt==`TRUE')    _Format_clog_nogt(S)
+        if (L.O.nolskip==`TRUE') _Format_clog_nolskip(S)
+    }
+}
+
+// remove qui/oom/cnp tags
+void _Format_clog_striptags(`Main' M, `StrC' S)
+{
+    `Int'  i
+    `Str'  s
+    `IntC' p
+    
+    if (any(strpos(S, M.Ltag.ST))) {
+        i = rows(S)
+        p = J(i,1,1)
+        for (; i; i--) {
+            s = TabTrim(S[i])
+            if      (s==M.Ltag.qui) p[i] = 0
+            else if (s==M.Ltag.oom) p[i] = 0
+            else if (s==M.Ltag.cnp) p[i] = 0
+        }
+        S = select(S, p)
     }
 }
 
@@ -3318,26 +3402,6 @@ void _Format_clog_nolb(`Main' M, `StrC' S)
     return(Cat(fn1))
 }
 
-// remove qui/oom/cnp tags
-void _Format_clog_striptags(`Main' M, `StrC' S)
-{
-    `Int'  i
-    `Str'  s
-    `IntC' p
-    
-    if (any(strpos(S, M.Ltag.ST))) {
-        i = rows(S)
-        p = J(i,1,1)
-        for (; i; i--) {
-            s = TabTrim(S[i])
-            if      (s==M.Ltag.qui) p[i] = 0
-            else if (s==M.Ltag.oom) p[i] = 0
-            else if (s==M.Ltag.cnp) p[i] = 0
-        }
-        S = select(S, p)
-    }
-}
-
 // remove "> " at beginning of line
 void _Format_clog_nogt(`StrC' S)
 {
@@ -3350,10 +3414,23 @@ void _Format_clog_nogt(`StrC' S)
     if (length(p)) S[p] = "  " :+ substr(S[p], 3, .)
 }
 
+// restore blank lines
+void _Format_clog_nolskip(`StrC' S)
+{
+    `Int'  r
+    `IntC' p
+    
+    r = rows(S)
+    if (!r) return
+    p = select(1::r, S:=="{\smallskip}")
+    r = length(p)
+    if (r) S[p] = J(r, 1, "")
+}
+
 // common formatting functions ------------------------------------------------
 
 // apply substitutions 
-void _Format_subst(`StrC' f, `StrM' subst) // also used by Append()
+void _Format_subst(`StrC' f, `StrM' subst) // also used by Parse_Append()
 {
     `Int' i, k
     
@@ -3541,22 +3618,25 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
         return
     }
     if (L->O.scale<.) {
-        fwrite(M.tgt.fh, "\noindent")
-        fput(M.tgt.fh, "\scalebox{"+sprintf("%g", L->O.scale)+"}{%")
+        if (L->O.beamer!=`TRUE') fwrite(M.tgt.fh, "\noindent")
+        fput(M.tgt.fh, "\scalebox{" + sprintf("%g", L->O.scale) + "}{%")
         if (L->O.blstretch<.) {
-            fput(M.tgt.fh, "\renewcommand{\baselinestretch}{"+
-            sprintf("%g", L->O.blstretch)+"}%")
+            fput(M.tgt.fh, "\renewcommand{\baselinestretch}{" +
+            sprintf("%g", L->O.blstretch) + "}%")
         }
-        if (L->O.beamer!=`TRUE') {
-            fput(M.tgt.fh, "\setlength{\leftmargini}{\leftmargini/\real{"+
-                sprintf("%g", L->O.scale)+"}}%")
+        if (L->O.scale==1) fput(M.tgt.fh, "\begin{minipage}{\linewidth}%")
+        else {
+            if (L->O.beamer!=`TRUE') {
+                fput(M.tgt.fh, "\setlength{\leftmargini}{\leftmargini/\real{" +
+                    sprintf("%g", L->O.scale) + "}}%")
+            }
+            fput(M.tgt.fh, "\begin{minipage}{\linewidth/\real{" +
+                sprintf("%g", L->O.scale) + "}}%")
         }
-        fput(M.tgt.fh, "\begin{minipage}{\linewidth/\real{"+
-             sprintf("%g", L->O.scale)+"}}%")
     }
     else if (L->O.blstretch<.) {
-        fput(M.tgt.fh, "\begingroup\renewcommand{\baselinestretch}{"+
-            sprintf("%g", L->O.blstretch)+"}%")
+        fput(M.tgt.fh, "\begingroup\renewcommand{\baselinestretch}{" +
+            sprintf("%g", L->O.blstretch) + "}%")
     }
     if (L->O.nobegin!=`TRUE') fwrite(M.tgt.fh, L->O.Begin)
     if (L->O.statc!=`TRUE') {
@@ -3590,7 +3670,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
             if (r) {
                 lnum = strofreal(L.Lnum.idx)
                 lnum = (strlen(lnum[r]) :- strlen(lnum)) :* " " + lnum
-                S[L.Lnum.p] = lnum :+ " " :+ S[L.Lnum.p]
+                S[L.Lnum.p] = lnum :+ L.O.lsuffix :+ S[L.Lnum.p]
             }
         }
         if (rows(L.O.ltag)) S = L.lhs + S + L.rhs
@@ -3598,7 +3678,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     }
     else {
         if (L.O.lnumbers==`TRUE') S[L.Lnum.p] = 
-            ("\stlnum{":+strofreal(L.Lnum.idx):+"}") :+ S[L.Lnum.p]
+            ("\stlnum{":+strofreal(L.Lnum.idx):+L.O.lsuffix:+"}") :+ S[L.Lnum.p]
         if (rows(L.O.ltag)) S = L.lhs + S + L.rhs
     }
     return(S)
@@ -3733,13 +3813,6 @@ void External_logfiles(`Main' M)
         if (!direxists(dir)) mkdir(dir)
         Fput(fn, Weave_L_log(*L))
     }
-}
-
-`Str' MkDir(`Str' tgtdir, `Str' dir)
-{
-    if (dir==".")         return(tgtdir)
-    if (!pathisabs(dir))  return(pathjoin(tgtdir, dir))
-    return(dir) // absolute path
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3944,6 +4017,14 @@ void ErrorLines(`Source' F)
 /*---------------------------------------------------------------------------*/
 /* helper functions for file I/O                                             */
 /*---------------------------------------------------------------------------*/
+
+// compile path for log files, graphs, and dofiles
+`Str' MkDir(`Str' tgtdir, `Str' dir)
+{
+    if (dir==".")         return(tgtdir)
+    if (!pathisabs(dir))  return(pathjoin(tgtdir, dir))
+    return(dir) // absolute path
+}
 
 // read file; simplified cat() that pushes file handle to local macro
 `StrC' Cat(`Str' filename)

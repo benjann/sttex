@@ -1,5 +1,5 @@
 {smcl}
-{* 05oct2022}{...}
+{* 12oct2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -147,7 +147,7 @@
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt gt}}remove continuation symbols; default is {cmd:gt}
     {p_end}
-{synopt:[{cmd:{ul:no}}]{opt lnum:bers}}add line numbers; requires definition of {cmd:\stlnum{}}
+{synopt:[{cmd:{ul:no}}]{opt lnum:bers}[{cmd:(}{it:str}{cmd:)}]}add line numbers; requires definition of {cmd:\stlnum{}}
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt lcont:inue}}continue line numbers from prior log
     {p_end}
@@ -168,6 +168,9 @@
 
 {syntab :Code log only}
 {synopt:{opt cl:size(#)}}set the line width used by {cmd:log texman}
+    {p_end}
+{synopt:[{cmd:{ul:no}}]{opt ls:kip}}do not replace blank lines by
+    {cmd:\smallskip}; default is {cmd:lskip}
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt tex:man}}do not apply {cmd:log texman}; default is
     {cmd:texman}
@@ -255,6 +258,14 @@
     as {cmd:sttex} remembers the setting between Stata sessions (the setting will
     be stored in a file added to the folder in which {cmd:sttex.ado} resides). To
     delete the setting, type {cmd:sttex register tex} without argument.
+
+{pstd}
+    Furthermore, you may want to add {cmd:stata.sty} to the LaTeX
+    installation. By default, Stata output inserted by {cmd:sttex} will be
+    enclodsed in environment {cmd:stlog}, which is defined by {cmd:stata.sty}. That
+    is, {cmd:stata.sty} should be loaded in your document; see
+    {help sttex##preamble:Preamble of LaTeX file} below. {cmd:stata.sty}
+    is provided by Stata Corp as part of {helpb sjlatex}.
 
 {pstd}
     {cmd:sttex extract} is a utility command that can be used to collect all blocks
@@ -788,19 +799,23 @@
     typesetting.
 
 {phang}
-    {opt jobname(name)} specifies a custom base name for PDF file.
+    {opt jobname(name)} specifies a custom base name for PDF file. {cmd:jobname()} has
+    an effect only if {cmd:typeset} or {cmd:view} has been specified.
 
 {phang}
     {opt cleanup} removes auxiliary files left behind by the LaTeX compiler. Depending
-    on situation, {cmd:cleanup} may not catch all auxiliary files.
+    on situation, {cmd:cleanup} may not catch all auxiliary files. {cmd:cleanup} has
+    an effect only if {cmd:typeset} or {cmd:view} has been specified.
 
 {phang}
     [{cmd:no}]{opt bibtex} overrides whether BibTeX will be applied or not. By default,
-    {cmd:sttex} will decide depending on situation whether to run BibTeX.
+    {cmd:sttex} will decide depending on situation whether to run BibTeX. {cmd:bibtex} has
+    an effect only if {cmd:typeset} or {cmd:view} has been specified.
 
 {phang}
     [{cmd:no}]{opt makeindex} overrides whether makeindex will be applied or not. By default,
-    {cmd:sttex} will decide depending on situation whether to run makeindex.
+    {cmd:sttex} will decide depending on situation whether to run makeindex. {cmd:makeindex} has
+    an effect only if {cmd:typeset} or {cmd:view} has been specified.
 
 {marker dooptions}{...}
 {title:Do options}
@@ -817,7 +832,8 @@
 {phang}
     [{cmd:no}]{opt certify} specifies whether to compare the results log of a code
     block against the previous version. The default is {cmd:nocertify}. Error
-    will be returned, if {cmd:certify} is specified and differences are detected.
+    will be returned if {cmd:certify} is specified and differences (in both the
+    SMCL log as well as a plain text translation of the log) are detected.
 
 {phang}
     [{cmd:no}]{opt dosave} specifies whether to store a copy of a code block in
@@ -947,14 +963,16 @@
     continuation symbols.
 
 {phang}
-    [{cmd:no}]{opt lnumbers} specifies whether to add line numbers to the
+    [{cmd:no}]{opt lnumbers}[{cmd:(}{it:str}{cmd:)}] specifies whether to add line numbers to the
     log. Default is {cmd:nolnumbers}. Line numbers are added after
-    other formatting options have taken effect.
+    other formatting options have taken effect. Argument {it:str} specifies a
+    suffix to be added to the line numbers. The default suffix is "{cmd:: }". Type
+    {cmd:lnumbers("")} to remove the suffix.
 
 {pmore}
     The line numbers will be included in command {cmd:\stlnum{}}, which needs to
     be defined in the preamble of the document. For example, define
-    {cmd:\stlnum{}} as {cmd:\def\stlnum#1{\makebox[0pt][r]{#1~}}} to print right
+    {cmd:\stlnum{}} as {cmd:\def\stlnum#1{\makebox[0pt][r]{#1}}} to print right
     aligned-numbers on the left of the log. Line numbers will be added without
     {cmd:\stlnum{}} if {cmd:verbatim} is specified (code log only).
 
@@ -1021,6 +1039,11 @@
     {cmd:verbatim} is specified.
 
 {phang}
+    [{cmd:no}]{opt lskip} specifies whether to replace blank lines in the
+    code log by {cmd:\smallskip}. Default is {cmd:lskip}, as this is how
+    {cmd:log texman} behaves. Specify {cmd:nolskip} to restore the blank lines.
+
+{phang}
     [{cmd:no}]{opt texman} specifies whether to use a raw copy of
     code rather than a code log. Default is {cmd:texman}, in which case the
     code will be passed through {cmd:log texman} to create a code log. Specify
@@ -1049,13 +1072,13 @@
 
 {phang}
     [{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}] specifies the begin command of the
-    environment used to embed the log in the LaTeX file. The default is as set by 
+    environment used to embed the log in the LaTeX file. The default is as set by
     {helpb sttex##set:%STset}. Specify {cmd:nobegin} to omit the begin command; specify
     {opt begin(str)} to set the begin command to {it:str}.
 
 {phang}
     [{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}] specifies the end command of the
-    environment used to embed the log in the LaTeX file. The default is as set by 
+    environment used to embed the log in the LaTeX file. The default is as set by
     {helpb sttex##set:%STset}. Specify {cmd:noend} to omit the end comamnd; specify
     {opt end(str)} to set the end command to {it:str}.
 
@@ -1158,15 +1181,25 @@
 {pstd}
     To be able to compile a LaTeX file that includes Stata output inserted by
     {cmd:sttex} you should include command {cmd:\usepackage{stata}}
-    in the preamble of the source file ({cmd:stata.sty} is provided by Stata Corp
-    as part of {helpb sjlatex}). Furthermore, to be able to display graphs,
-    you may want to include {cmd:\usepackage{graphicx}}. For example, your file
-    could start about as follows:
+    in the preamble of the source file. Furthermore,
+    to be able to display graphs, you may want to include
+    {cmd:\usepackage{graphicx}}. For example, your file could start about as
+    follows:
 
         {com}\documentclass{article}
         \usepackage{graphicx}
         \usepackage{stata}
         ...{txt}
+
+{pstd}
+    {cmd:stata.sty} is provided by Stata Corp as part of {helpb sjlatex}; see
+
+        . {stata "net describe sjlatex, from(http://www.stata-journal.com/production)"}
+
+{pstd}
+    The procedure to make {cmd:stata.sty} available is to first
+    install {helpb sjlatex} in Stata and then use command {cmd:sjlatex install}
+    to copy the relevant LaTeX files to your system.
 
 {marker fontsize}{...}
 {dlgtab:Changing the font size of Stata logs}
