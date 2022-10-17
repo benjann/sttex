@@ -31,7 +31,7 @@ Installation from GitHub:
 
 Main changes:
 
-    12oct2022 (version 1.1.7)
+    17oct2022 (version 1.1.7)
     - new \stfile{} tag to collect files created by code; \stres{{file}} and 
       \stres{{fname}} added; fileopts() added to sttex, %STini, %STpart
     - if \stres{{logname}} was used to reference a log for which option -static- was

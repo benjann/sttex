@@ -1,5 +1,5 @@
 {smcl}
-{* 13oct2022}{...}
+{* 17oct2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}

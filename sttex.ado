@@ -1,4 +1,4 @@
-*! version 1.1.7  16oct2022  Ben Jann
+*! version 1.1.7  17oct2022  Ben Jann
 
 program sttex
     version 11
@@ -1738,6 +1738,7 @@ void Parse_Part(`Main' M, `Source' F)
     _collect_do_options(M, M.Copt, opts, F)
     _collect_log_options(M.Lopt, st_local("options"), F)
     _collect_graph_options(M.Gopt, st_local("gropts"), F)
+    _collect_cfile_options(M.CFopt, st_local("fileopts"), F)
 }
 
 /*---------------------------------------------------------------------------*/
