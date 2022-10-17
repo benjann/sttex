@@ -1,5 +1,5 @@
 {smcl}
-{* 12oct2022}{...}
+{* 13oct2022}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -30,6 +30,7 @@
     {help sttex##gopts:{it:general_options}}
     {help sttex##doopts:{it:do_options}}
     {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)}
+    {cmdab:file:opts(}{help sttex##fileopts:{it:file_options}}{cmd:)}
     ]
 
 {pmore}
@@ -220,6 +221,22 @@
     {p_end}
 {synoptline}
 
+{synoptset 22 tabbed}{...}
+{marker fileopts}{col 5}{help sttex##fileoptions:{it:file_options}}{col 29}Description
+{synoptline}
+{syntab :Main}
+{synopt:{opt range(from [to])}}select range of lines from file
+    {p_end}
+{synopt:{cmdab:subs:titute(}{help sttex##subst:{it:matchlist}}{cmd:)}}apply string substitutions
+    {p_end}
+{synopt:[{cmd:no}]{opt erase}}remove original file from disk; default is {cmd:noerase}
+    {p_end}
+
+{syntab :Embedding}
+{synopt:[{cmd:no}]{opt static}}do not copy contents into target document; default is {cmd:static}
+    {p_end}
+{synoptline}
+
 
 {marker description}{...}
 {title:Description}
@@ -279,10 +296,11 @@
 {title:Dynamic tags}
 
     LaTeX commands
-        {help sttex##stata:Stata or Mata code}
-        {help sttex##graph:Graphs}
+        {help sttex##stata:Run Stata or Mata code (and include results)}
+        {help sttex##graph:Inlcude graph created by code}
+        {help sttex##stfile:Include file created by code}
+        {help sttex##stlog:Include copy of results or code}
         {help sttex##inlexp:Inline expressions}
-        {help sttex##stlog:Log copies}
         {help sttex##include:Include external file}
         {help sttex##append:Append external file}
         {help sttex##eof:End of input}
@@ -295,7 +313,7 @@
         {help sttex##remove:Remove input}
 
 {marker stata}{...}
-{dlgtab:Stata or Mata code}
+{dlgtab:Run Stata or Mata code (and display results)}
 
 {pstd}
     To run a block of Stata commands and, optionally, display the output in the target
@@ -371,10 +389,10 @@
     commands had been copied into the main do-file.
 
 {marker graph}{...}
-{dlgtab:Graphs}
+{dlgtab:Inlcude graph created by code}
 
 {pstd}
-    To include a graph created by a prior code block, type
+    To include a graph created by the preceding code block, type
 
         {cmd:\stgraph{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{help sttex##gropts:{it:graph_options}}{cmd:{c )-}}
     or
@@ -384,15 +402,103 @@
     where {it:id} provides a custom name for the graph. The brackets do not need to be typed if
     {it:id} is omitted. An automatic name based on the name of the prior code block
     is assigned if {it:id} is omitted. The difference
-    between {cmd:\stgraph{}} and {cmd:\stgraph*{}} is that the latter
-    does not write any code to the LaTeX document to embed the graph.
+    between {cmd:\stgraph{}} and {cmd:\stgraph*{}} is that the latter only creates
+    a graph instance, but does not write anything to the target document. You
+    may use {helpb sttex##inlexpsp:\stres{{graph}}} to address
+    a graph instance created by {cmd:\stgraph{}} or {cmd:\stgraph*{}}.
 
 {pstd}
     The {cmd:\stgraph{}} tag must start at the beginning of a line;
     any text in the same line after the tag will be ignored. Furthermore,
     {cmd:\stgraph{}} is only allowed if there is at least one prior code block
-    in the current part of the document. The {cmd:do}/{cmd:nodo} setting of the
-    prior code block is inherited by {cmd:\stgraph{}}.
+    in the current part of the document.
+
+{marker stfile}{...}
+{dlgtab:Include file created by code}
+
+{pstd}
+    To collect the contents of a file created by the preceding code block and
+    include it in the target document, type
+
+        {cmd:\stfile{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
+    or
+        {cmd:\stfile*{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
+
+{pstd}
+    where {it:filename} specifies the name of the file to be collected
+    (possibly including a path); extension {cmd:.tex} is assumed if {it:filename} is
+    specified without suffix. Optional argument {it:id} provides a custom name
+    for the collected file contents. The brackets do not need to be typed if
+    {it:id} is omitted. An automatic name based on the name of the prior code block
+    is assigned if {it:id} is omitted. The difference
+    between {cmd:\stfile{}} and {cmd:\stfile*{}} is that the latter only creates
+    an instance of collected file contents, but does not write anything to the target
+    document. You may use {helpb sttex##inlexpsp:\stres{{file}}} to address
+    an instance created by {cmd:\stgraph{}} or {cmd:\stgraph*{}}.
+
+{pstd}
+    The {cmd:\stfile{}} tag must start at the beginning of a line;
+    any text in the same line after the tag will be ignored. Furthermore,
+    {cmd:\stfile{}} is only allowed if there is at least one prior code block
+    in the current part of the document.
+
+{pstd}
+    An example of the use {cmd:\stfile{}} is as follows:
+
+        {com}\begin{stata*}
+            sysuse auto
+            regress price foreign weight
+            etable, export(example.tex, tableonly)
+        \end{stata*}
+        \stfile{example.tex}[erase]{txt}
+
+{pstd}
+    In this way the table written by {helpb etable} will be pasted into the target
+    document and the file on disk will be removed.
+
+{marker stlog}{...}
+{dlgtab:Include copy of results or code}
+
+{pstd}
+    To obtain a copy of the results log or the code log from one or multiple
+    code blocks, type
+
+        {cmd:\stlog{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
+    or
+        {cmd:\stlog*{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
+
+{pstd}
+    where {it:idlist} is a space-separated list of the names of the blocks
+    (the blocks must already exist; referencing a future block is not allowed). The
+    last block will be used if {it:idlist} is omitted (the brackets do not
+    need to be typed if {it:idlist} is omitted). Wildcard characters {cmd:*} and
+    {cmd:?} are allowed in {it:idlist}. For example, {cmd:\stlog[*]{}} will
+    compile a log from all existing code blocks (in the order in which they appear
+    in the document). The {cmd:\stlog{}} tag must start at the beginning of a line; any
+    text in the same line after the tag will be ignored.
+
+{pstd}
+    {cmd:\stlog{}} is useful if you want to include multiply copies of a log with
+    different options. For example, you could specify option {cmd:range(1 10)} with the main
+    copy to print only lines 1-10 and then use {cmd:\stlog{}} with option
+    {cmd:range(11 .)} to print the remaining lines. Likewise you could
+    specify option {cmd:code} with the main copy to print the code log and then
+    print the results log by applying {cmd:\stlog{}} without option {cmd:code}.
+
+{pstd}
+    The difference between {cmd:\stlog{}} and {cmd:\stlog*{}} is that the latter
+    only creates an instance of a log, but does not write anything to the target
+    document. You may use {helpb sttex##inlexpsp:\stres{{log}}} to address
+    an instance of a log created by {cmd:\stlog{}} or {cmd:\stlog*{}}. The
+    instance will be named {it:id}{cmd:.}{it:#}, where {it:id} is the
+    name of the (first) code block referenced by {it:idlist} and where
+    {it:#} is a counter.
+
+{pstd}
+    Note that each code block automatically creates a main log instance based
+    on the {it:log_options} specified as part of the {it:do_options} of the
+    block. The main log instance is named {it:id}, where {it:id} is
+    the name of the block.
 
 {marker inlexp}{...}
 {dlgtab:Inline expressions}
@@ -423,7 +529,6 @@
     subsequent text as a comment. {cmd:sttex} will replace {cmd:\%} by
     {cmd:%} before processing {it:{help display:display_directive}}.
 
-
 {pstd}
     Syntax 2: Pre-processing time evaluation
 
@@ -442,71 +547,49 @@
     Similar to syntax 1, {cmd:\%} within {it:{help display:display_directive}}
     will be replaced by {cmd:%} before evaluation.
 
+{marker inlexpsp}{...}
 {pstd}
     Syntax 3: Special functions
 
             {cmd:\stres{c -(}{c -(}}{it:keyword} [{it:id}]{cmd:{c )-}{c )-}}
 
 {pmore}
-    Use this syntax for custom inclusion of a Stata log or a graph. This may be
-    useful, for example, in combination with {cmd:\stgraph*{}}. {it:keyword}
-    can be one of the following:
+    Use this syntax for custom inclusion of a Stata log, a collected
+    file, or a graph. This may be useful in combination with
+    {cmd:begin{stata*}}...{cmd:\end{stata*}}, {cmd:\stfile*{}}, or
+    {cmd:\stgraph*{}}. {it:keyword} can be one of the following:
 
 {p2colset 14 24 26 2}{...}
-{p2col:{cmd:log}}add the log from Stata block named {it:id}; the log from the last
-    code block will be used if {it:id} is omitted
+{p2col:{cmd:log}}add the log from Stata block named {it:id}; the last log will
+    be used if {it:id} is omitted
     {p_end}
-{p2col:{cmd:logname}}add the filename used for the log
+{p2col:{cmd:logname}}add the filename used for the log (the file will be created
+    if needed)
     {p_end}
 {p2col:{cmd:graph}}add the graph named {it:id}; the last graph will be used if
     {it:id} is omitted
     {p_end}
-{p2col:{cmd:graphname}}add the filename used for the graph (without suffix)
+{p2col:{cmd:grname}}add the filename used for the graph (without suffix)
+    {p_end}
+{p2col:{cmd:file}}add the contents of collected file named {it:id}; the last
+    collected file will be used if {it:id} is omitted
+    {p_end}
+{p2col:{cmd:fname}}add the filename used for the collected file (the file will
+    be created if needed)
     {p_end}
 
 {pmore}
     The way in which {cmd:\stres{{log}}} puts together the LaTeX code to
-    display the output depends on the {help sttex##stopts:{it:stlog_options}}
-    that were applied when generating the output. Likewise, the behavior of
-    {cmd:\stres{{graph}}} depends on the {help sttex##gropts:{it:graph_options}}
-    that were applied when exporting the graph.
+    display the output depends on the options that were applied when generating
+    the output. Likewise, the behaviors of {cmd:\stres{{graph}}} and
+    {cmd:\stres{{file}}} depend on the options that were applied when exporting
+    the graph or collecting the file.
 
 {pmore}
-    Note that a log or graph can be addressed by {cmd:\stres{}} even if it does
-    not yet exist. That is, you can use {cmd:\stres{}} to include a log or
-    graph anywhere in the document, independently of the where in the document
-    the log or graph is created.
-
-{marker stlog}{...}
-{dlgtab:Log copies}
-
-{pstd}
-    To obtain a copy of the results log or the code log from one or multiple blocks
-    of Stata commands, type
-
-        {cmd:\stlog{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
-    or
-        {cmd:\stlog*{cmd:[}}{it:idlist}{cmd:]}{cmd:{c -(}}{help sttex##logopts:{it:log_options}}{cmd:{c )-}}
-
-{pstd}
-    where {it:idlist} is a space-separated list of the names of the blocks
-    (the blocks must already exist; referencing a future block is not allowed). The last block
-    will be used if {it:idlist} is omitted. The log created by {cmd:\stlog{}}
-    will be named {it:id}{cmd:.}{it:#}, where {it:id} is the name of the
-    (first) code block referenced by {it:idlist} and where {it:#} is a counter.
-
-{pstd}
-    The {cmd:*} and {cmd:?} wildcards are allowed in {it:idlist}. For example,
-    {cmd:\stlog[*]{}} will compile a log from all existing code blocks (in the
-    order in which they appear in the document).
-
-{pstd}
-    {cmd:\stlog{}} is useful if you want to include multiply copies of a log with
-    different options. For example, you could specify option {cmd:range(1 10)} with the main
-    copy to print only lines 1-10 and then use {cmd:\stlog{}} with option
-    {cmd:range(11 .)} to print the remaining lines. Likewise you could
-    specify option {cmd:code} with the main copy to print the code log and then
-    print the results log by applying {cmd:\stlog{}} without option {cmd:code}.
+    Note that a log, graph, or file can be addressed by {cmd:\stres{}} even if it does
+    not yet exist. That is, you can use {cmd:\stres{}} to include a log, graph, or
+    file anywhere in the document, independently of the where in the document
+    the instance of the log, graph, or file is created.
 
 {marker include}{...}
 {dlgtab:Include external file}
@@ -522,7 +605,8 @@
     interpreted in the same way as they are interpreted in the main
     file. {cmd:\stinput{}} must start at
     the beginning of a line; any text in the same line after the tag is
-    ignored.
+    ignored. The file will be read when parsing the source file, that is, before
+    running any code.
 
 {marker append}{...}
 {dlgtab:Append external file}
@@ -537,7 +621,8 @@
     or relative path. Dynamic tags within the external file will not be
     interpreted. {cmd:\stappend{}} must start at
     the beginning of a line; any text in the same line after the tag is
-    ignored.
+    ignored. The file will be read when parsing the source file, that is, before
+    running any code.
 
 {pstd}
     {it:substitutions} may be specified to apply substitutions within the
@@ -570,7 +655,8 @@
     {cmd:%STinit} [{it:tgtfile}] [{cmd:,}
     {help sttex##gopts:{it:general_options}}
     {help sttex##doopts:{it:do_options}}
-    {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)} ]
+    {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)}
+    {cmdab:file:opts(}{help sttex##fileopts:{it:file_options}}{cmd:)} ]
 
 {pstd}
     within the first 50 lines of the source file. {it:tgtfile} and options
@@ -638,7 +724,8 @@
 {p 8 15 2}
     {cmd:%STpart} [{it:id} [{it:parent}]] [{cmd:,}
     {help sttex##doopts:{it:do_options}}
-    {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)} ]
+    {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)}
+    {cmdab:file:opts(}{help sttex##fileopts:{it:file_options}}{cmd:)} ]
 
 {pstd}
     where {it:id} provides a custom name for the part. An automatic name is
@@ -665,8 +752,9 @@
     specify {cmd:.} to create a standalone part (which, however, may have children).
 
 {pstd}
-    Specify {help sttex##doopts:{it:do_options}} and
-    {help sttex##gropts:{it:graph_options}} to change overall options between
+    Specify {help sttex##doopts:{it:do_options}},
+    {help sttex##gropts:{it:graph_options}}, and
+    {help sttex##fileopts:{it:file_options}} to change overall options between
     parts.
 
 {pstd}
@@ -713,6 +801,7 @@
     {help sttex##dooptions:Do options}
     {help sttex##logoptions:Log options}
     {help sttex##groptions:Graph options}
+    {help sttex##fileoptions:File options}
 
 {marker goptions}{...}
 {title:General options}
@@ -939,9 +1028,8 @@
 
 {marker subst}{...}
 {phang}
-    {opt substitute(matchlist)} applies string substitutions in the log. The  the syntax of
+    {opt substitute(matchlist)} applies string substitutions in the log. The syntax of
     {it:matchlist} is
-
 
             {it:strlist} {cmd:=} {it:to} [ {it:strlist} {cmd:=} {it:to} ... ]
 
@@ -1064,7 +1152,7 @@
 {dlgtab:Embedding}
 
 {phang}
-    [{cmd:no}]{opt static} specifies whether to copy the log into the LaTeX
+    [{cmd:no}]{opt static} specifies whether to copy the log into the target
     document or not. Default is {cmd:nostatic}, in which case the log is stored as a
     separate file and included in the LaTeX document using the {cmd:\input{}}
     command. If the target file is a beamer class document, option {cmd:static}
@@ -1072,13 +1160,13 @@
 
 {phang}
     [{cmd:no}]{opt begin}[{cmd:(}{it:str}{cmd:)}] specifies the begin command of the
-    environment used to embed the log in the LaTeX file. The default is as set by
+    environment used to embed the log in the target file. The default is as set by
     {helpb sttex##set:%STset}. Specify {cmd:nobegin} to omit the begin command; specify
     {opt begin(str)} to set the begin command to {it:str}.
 
 {phang}
     [{cmd:no}]{opt end}[{cmd:(}{it:str}{cmd:)}] specifies the end command of the
-    environment used to embed the log in the LaTeX file. The default is as set by
+    environment used to embed the log in the target file. The default is as set by
     {helpb sttex##set:%STset}. Specify {cmd:noend} to omit the end comamnd; specify
     {opt end(str)} to set the end command to {it:str}.
 
@@ -1150,6 +1238,45 @@
     [{cmd:no}]{opt epsfig}} specifies whether to use {cmd:\epsfig{}} instead of
     {cmd:\includegraphics{}} to embed the graph in the target document. Default
     is {cmd:noepsfig}.
+
+{marker fileoptions}{...}
+{title:File options}
+
+{dlgtab:Main}
+
+{phang}
+    {opt range(from [to])} selects a specified range of the file, where {it:from}
+    is the first line number and {it:to} is the last line number to be included. To
+    include all remaining lines after {it:from}, you may omit {it:to} or specify
+    {it:to} as {cmd:.} (missing).
+
+{phang}
+    {opt substitute(matchlist)} applies string substitutions. The syntax of
+    {it:matchlist} is
+
+            {it:strlist} {cmd:=} {it:to} [ {it:strlist} {cmd:=} {it:to} ... ]
+
+{pmore}
+    where {it:strlist} is a space separated list of target strings and {it:to}
+    is the string by which the target strings are to be replaced. Enclose strings
+    in double quotes if they contain spaces. Specify {it:to} as {cmd:""} for
+    empty string.
+
+{phang}
+    [{cmd:no}]{opt erase} specifies whether to erase the original file from disk
+    after collecting it. Default is {cmd:noerase}. Specify {cmd:erase} to delete
+    the original file.
+
+{dlgtab:Embedding}
+
+{phang}
+    [{cmd:no}]{opt static} specifies whether to copy the collected contents
+    into the target document or not. Default is {cmd:static}, in which case the
+    contents will directly be written to the taget document. Specify {cmd:nostatic}
+    to write the contents to a separate file that will then be included in the
+    target document using the {cmd:\input{}} command. The file will be placed
+    in the same location as the log file(s) of the corresponding code
+    block.
 
 
 {marker remarks}{...}

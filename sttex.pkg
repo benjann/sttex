@@ -3,6 +3,6 @@ d sttex: Stata module to integrate Stata results into a LaTeX document
 d 
 d Author: Ben Jann, University of Bern, ben.jann@unibe.ch
 d
-d Distribution-Date: 20221012
+d Distribution-Date: 20221017
 f sttex.sthlp
 f sttex.ado
