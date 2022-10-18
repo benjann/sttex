@@ -31,6 +31,10 @@ Installation from GitHub:
 
 Main changes:
 
+    18oct2022 (version 1.1.8)
+    - if used on Windows, sttex failed to replace "\" by "/" in file paths written
+      to the target LaTeX file; this is fixed
+
     17oct2022 (version 1.1.7)
     - new \stfile{} tag to collect files created by code; \stres{{file}} and 
       \stres{{fname}} added; fileopts() added to sttex, %STini, %STpart

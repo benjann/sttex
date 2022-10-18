@@ -1,4 +1,4 @@
-*! version 1.1.7  17oct2022  Ben Jann
+*! version 1.1.8  18oct2022  Ben Jann
 
 program sttex
     version 11
@@ -3892,7 +3892,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
 {
     `Bool' fnonly
     `Int'  l, b
-    `Str'  id, fn
+    `Str'  id
     `pLog' L
     
     // parsing
@@ -3921,10 +3921,8 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, Weave_id_err(id, "log"))
         return
     }
-    if (L->O.logdir==".") fn = id + ".log.tex"
-    else                  fn = pathjoin(L->O.logdir, id) + ".log.tex"
     if (fnonly) { // if \stres{{logname}}: add filename only
-        fwrite(M.tgt.fh, fn)
+        fwrite(M.tgt.fh, MkTexfn(L->O.logdir, id, ".log.tex"))
         M.logsave = L->save = `TRUE' // need to save log on disc
         return
     }
@@ -3951,7 +3949,7 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     }
     if (L->O.nobegin!=`TRUE') fwrite(M.tgt.fh, L->O.Begin)
     if (L->O.statc!=`TRUE') {
-        fwrite(M.tgt.fh, "\input{" +  fn + "}")
+        fwrite(M.tgt.fh, "\input{" + MkTexfn(L->O.logdir, id, ".log.tex") + "}")
         M.logsave = L->save = `TRUE' // need to save log on disc
     }
     else {
@@ -3999,7 +3997,7 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
 {
     `Bool'   fnonly
     `Int'    l, b
-    `Str'    id, fn
+    `Str'    id
     `pGraph' G
 
     // parsing
@@ -4028,10 +4026,8 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, Weave_id_err(id, "graph"))
         return
     }
-    if (G->O.dir==".") fn = id
-    else               fn = pathjoin(G->O.dir, id)
     if (fnonly) { // if \stres{{graphname}}: add filename only (without suffix)
-        fwrite(M.tex.fh, fn)
+        fwrite(M.tex.fh, MkTexfn(G->O.dir, id))
         return
     }
     if (G->O.center==`TRUE') fwrite(M.tgt.fh, "\begin{center}")
@@ -4039,14 +4035,14 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, "\textbf{(error:\ graph not available)}")
     }
     else if (G->O.epsfig==`TRUE') {
-        fwrite(M.tgt.fh, "\epsfig{file=" + fn +
+        fwrite(M.tgt.fh, "\epsfig{file=" + MkTexfn(G->O.dir, id) +
             (G->O.suffix==`TRUE' ? "." + G->O.as[1] : "") + 
             (G->O.args!="" ? "," + G->O.args : "") + "}")
     }
     else {
         fwrite(M.tgt.fh, "\includegraphics")
         if (G->O.args!="") fwrite(M.tgt.fh, "[" + G->O.args + "]")
-        fwrite(M.tgt.fh, "{" + fn + 
+        fwrite(M.tgt.fh, "{" + MkTexfn(G->O.dir, id) + 
             (G->O.suffix==`TRUE' ? "." + G->O.as[1] : "") + "}")
     }
     if (G->O.center==`TRUE') fwrite(M.tgt.fh, "\end{center}")
@@ -4086,9 +4082,7 @@ void Weave_CF(`Main' M, `Str' s, `Int' a)
         return
     }
     if (fnonly | CF->O.nostatic==`TRUE') { // add filename
-        fn = pathsuffix(CF->O.fn)
-        if (CF->O.logdir==".") fn = id + fn
-        else                   fn = pathjoin(CF->O.logdir, id) + fn
+        fn = MkTexfn(CF->O.logdir, id, pathsuffix(CF->O.fn))
         if (fnonly) fwrite(M.tgt.fh, fn)
         else        fwrite(M.tgt.fh, "\input{" +  fn + "}")
         M.cfsave = CF->save = `TRUE' // need to save log on disc
@@ -4417,6 +4411,17 @@ void ErrorLines(`Source' F)
     if (dir==".")         return(tgtdir)
     if (!pathisabs(dir))  return(pathjoin(tgtdir, dir))
     return(dir) // absolute path
+}
+
+// compile path/filename for inclusion in LaTeX
+`Str' MkTexfn(`Str' dir, `Str' fn, | `Str' suffix)
+{
+    `Str' path
+    
+    if (dir==".") return(fn + suffix)
+    path = pathjoin(dir, fn)
+    if (st_global("c(os)")=="Windows") path = subinstr(path, "\", "/")
+    return(path + suffix)
 }
 
 // read file; simplified cat() that pushes file handle to local macro
