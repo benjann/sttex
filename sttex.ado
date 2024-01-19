@@ -1,4 +1,4 @@
-*! version 1.1.8  18oct2022  Ben Jann
+*! version 1.1.9  19jan2024  Ben Jann
 
 program sttex
     version 11
@@ -76,11 +76,17 @@ program Process, rclass
     local options0 `macval(options)'
     local StartAtLine 1
     nobreak {
-        if "`extract'"!="" local savingextract `"`saving'"'
-            // (ignore saving from %STinit in case of sttex extract)
+        if "`extract'"!="" {
+            local savingextract `"`saving'"'
+            local savingreplace `"`replace'"'
+        }
         capt n break mata: GetInitFromSourcefile()  // parse %STinit
         mata: CloseOpenFHsAndExit(`=_rc')
-        if "`extract'"!="" local saving `"`savingextract'"'
+        if "`extract'"!="" {
+            // ignore saving() and replace from %STinit in case of sttex extract
+            local saving `"`savingextract'"'
+            local replace `"`savingreplace'"'
+        }
     }
     local options1 `macval(options)'
     local typeset `typeset' `typeset2' `view' `view2'
@@ -171,7 +177,7 @@ program _collect_typeset_options
 end
 
 program _collect_do_options
-    local opts DO CERTify DOSave TRIM OUTput
+    local opts DO CERTify DOSave TRIM OUTput EXTRact GAP TItle
     foreach o of local opts {
         local noopts `noopts' NO`o'
     }
@@ -180,7 +186,7 @@ program _collect_do_options
         dodir(str) ///
         LInesize(numlist int max=1 >=40 missingok) ////
         TRIM2(numlist int max=1 >=0 missingok) ///
-        GRopts(str asis) FILEopts(str asis) * ]
+        TItle2(str) GRopts(str asis) FILEopts(str asis) * ]
     if "`linesize'"!="" {
         if `linesize'>255 & `linesize'<. {
             di as err "linesize() invalid -- invalid number, outside of allowed range"
@@ -189,6 +195,7 @@ program _collect_do_options
     }
     if `"`trim2'"'!=""   local trim trim
     else if "`trim'"!="" local trim2 .
+    if `"`title2'"'!=""  local title title
     foreach o of local opts {
         local opt = strlower("`o'")
         if "``opt''"!="" & "`no`opt''"!="" {
@@ -201,6 +208,7 @@ program _collect_do_options
     c_local dodir    `"`dodir'"'
     c_local linesize `linesize'
     c_local trim2    `trim2'
+    c_local title2   `"`macval(title2)'"'
     c_local gropts   `"`macval(gropts)'"'
     c_local fileopts `"`macval(fileopts)'"'
     c_local options  `"`macval(options)'"'
@@ -777,6 +785,13 @@ struct `COPT' {
                 linesize    // width of output log
     `Str'       logdir,     // path of log file
                 dodir       // path of do file
+    // extract options (added in version 1.1.9; the options are only used
+    // by -sttex extract-, which does not read the db; this implies that use of
+    // sb written by version 1.1.8 does not lead to error in current version)
+    `Bool'      noextract,  // omit from extract
+                nogap,      // omit empty line before code block
+                notitle     // omit name or title of code block
+    `Str'       title       // use specified title instead of name
 }
 
 // structure for logs
@@ -1086,7 +1101,7 @@ void Process()
     M.replace = (st_local("replace")!="")
     Fexists(M.tgt.fn, M.replace)
     
-    // Whether to run sttey or just extract stata code
+    // Whether to run sttex or just extract stata code
     M.run = st_local("extract")!="extract"
     
     // temporary do-file and tex-file; main log file
@@ -1249,19 +1264,24 @@ void _collect_do_options(`Main' M, `Copt' O, `Str' opts, `Source' F,
     // run Stata parser
     rc = _stata("_collect_do_options, " + opts)
     if (rc) {
-        if (init==1)     errprintf("error in %STinit\n")
+        if (init==1)     errprintf("error in %%STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
     // collect on/off options (1 = on, 0 = off, . = not specified)
-    _collect_onoff_option("nodo"    , O.nodo)
-    _collect_onoff_option("certify" , O.certify)
-    _collect_onoff_option("dosave"  , O.dosave)
-    _collect_onoff_option("notrim"  , O.notrim)
-    _collect_onoff_option("nooutput", O.nooutput)
+    _collect_onoff_option("nodo"     , O.nodo)
+    _collect_onoff_option("certify"  , O.certify)
+    _collect_onoff_option("dosave"   , O.dosave)
+    _collect_onoff_option("notrim"   , O.notrim)
+    _collect_onoff_option("nooutput" , O.nooutput)
+    _collect_onoff_option("noextract", O.noextract)
+    _collect_onoff_option("nogap"    , O.nogap)
+    _collect_onoff_option("notitle"  , O.notitle)
     // numeric options (. if not specified)
     if (st_local("trim2")!="")    O.trim     = strtoreal(st_local("trim2"))
     if (st_local("linesize")!="") O.linesize = strtoreal(st_local("linesize"))
+    // title
+    if (st_local("title2")!="") O.title = st_local("title2")
     // logdir
     if (st_local("logdir")!="") O.logdir = st_local("logdir")
     // dodir
@@ -1279,7 +1299,7 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     // run Stata parser
     rc = _stata("_collect_log_options, " + opts)
     if (rc) {
-        if (init==1)     errprintf("error in %STinit\n")
+        if (init==1)     errprintf("error in %%STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1333,7 +1353,7 @@ void _collect_graph_options(`Gopt' O, `Str' opts, `Source' F, | `Bool' init)
     // run Stata parser
     rc = _stata("_collect_graph_options, " + opts)
     if (rc) {
-        if (init==1)     errprintf("error in %STinit\n")
+        if (init==1)     errprintf("error in %%STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1360,7 +1380,7 @@ void _collect_cfile_options(`CFopt' O, `Str' opts, `Source' F, | `Bool' init)
     // run Stata parser
     rc = _stata("_collect_cfile_options, " + opts)
     if (rc) {
-        if (init==1)     errprintf("error in %STinit\n")
+        if (init==1)     errprintf("error in %%STinit\n")
         else if (F.i0<.) ErrorLines(F)
         exit(rc)
     }
@@ -1500,7 +1520,7 @@ void _collect_onoff_option(`Str' opt, `Bool' o, | `Str' prefix)
             ", int range(>=0) sort")
         if (rc) {
             errprintf("invalid specification of ltag() option\n")
-            if (init==1) errprintf("error in %STinit\n")
+            if (init==1) errprintf("error in %%STinit\n")
             else if (F.i0<.) ErrorLines(F)
             exit(rc)
         }
@@ -4257,14 +4277,24 @@ void External_dofiles(`Main' M)
 
 void Extract_code(`Main' M)
 {
-    `Int'    i
+    `Int'    i, j
+    `Str'    title
     `pCode'  C
     
+    j = 0
     M.tgt.fh = FOpen(M.tgt.fn, "w", "", 1)
     for (i=1;i<=M.ckeys;i++) {
-        if (i>1) fput(M.tgt.fh, "") // empty line
         C = asarray(M.C, M.Ckeys[i])
-        fput(M.tgt.fh, "// " + M.Ckeys[i])
+        if (C->O.noextract==`TRUE') continue
+        if (C->O.nogap!=`TRUE') {
+            if (j) fput(M.tgt.fh, "") // empty line (unless to of file)
+        }
+        j++
+        if (C->O.notitle!=`TRUE') {
+            title = C->O.title
+            if (title=="") title = M.Ckeys[i]
+            fput(M.tgt.fh, "// " + title)
+        }
         _Fput(M.tgt.fh, Get_cmd(M, *C))
     }
     FClose(M.tgt.fh, "")

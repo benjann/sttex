@@ -31,6 +31,13 @@ Installation from GitHub:
 
 Main changes:
 
+    19jan2024 (versipn 1.1.9)
+    - options noextract, nogap, notitle/title() added to do_options; these options
+      set the behavior of -sttex extract-
+    - -sttex extract- did not issue a "file already exists" warning, if the target
+      do-file existed and option -replace- was specified in %STinit; this is fixed
+      (i.e. -sttex extract- now ignores option -replace- specified in %STinit)
+
     18oct2022 (version 1.1.8)
     - if used on Windows, sttex failed to replace "\" by "/" in file paths written
       to the target LaTeX file; this is fixed

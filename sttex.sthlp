@@ -1,5 +1,5 @@
 {smcl}
-{* 17oct2022}{...}
+{* 19jan2024}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -124,6 +124,15 @@
 
 {syntab :Log options}
 {synopt:{help sttex##logopts:{it:log_options}}}options affecting formatting and embedding of log
+    {p_end}
+
+{syntab :Extract options}
+{synopt:[{cmd:no}]{opt extr:act}}omit code block from extract; default is {cmd:extract}
+    {p_end}
+{synopt:[{cmd:no}]{opt gap}}omit empty line before block; default is {cmd:gap}
+    {p_end}
+{synopt:[{cmd:no}]{opt ti:tle}[{cmd:(}{it:text}{cmd:)}]}omit title or specify custom
+    title; default is {cmd:title}
     {p_end}
 {synoptline}
 
@@ -977,6 +986,24 @@
     {it:log_options} are options selecting the type of log to be used
     and how the log is formatted and embedded in the target file. See
     {helpb sttex##logoptions:Log options} blow.
+
+{dlgtab:Extract options}
+
+{phang}
+    [{cmd:no}]{opt extract} specifies whether to include the code block in the
+    code extract saved by {cmd:sttex extract}. Default is {cmd:extract}. Specify
+    {cmd:noextract} to omit the code block.
+
+{phang}
+    [{cmd:no}]{opt gap} specifies whether to add an empty line before the code block
+    in the extract. Default is {cmd:gap}. Specify {cmd:nogap} to suppress the
+    empty line.
+
+{phang}
+    [{cmd:no}]{opt title}[{cmd:(}{it:text}{cmd:)}] specifies whether to add a
+    title line to the code block in the extract. Default is {cmd:title}. Specify
+    {cmd:notitle} to suppress the title line. Argument {it:text} specifies a custom
+    text for the title line; the default is to use the {it:id} of the code block.
 
 {marker logoptions}{...}
 {title:Log options}
