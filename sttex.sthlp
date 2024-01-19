@@ -443,7 +443,7 @@
     between {cmd:\stfile{}} and {cmd:\stfile*{}} is that the latter only creates
     an instance of collected file contents, but does not write anything to the target
     document. You may use {helpb sttex##inlexpsp:\stres{{file}}} to address
-    an instance created by {cmd:\stgraph{}} or {cmd:\stgraph*{}}.
+    an instance created by {cmd:\stfile{}} or {cmd:\stfile*{}}.
 
 {pstd}
     The {cmd:\stfile{}} tag must start at the beginning of a line;

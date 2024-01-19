@@ -1,4 +1,4 @@
-*! version 1.1.9  19jan2024  Ben Jann
+*! version 1.2.0  19jan2024  Ben Jann
 
 program sttex
     version 11
@@ -1899,17 +1899,13 @@ void Parse_Set(`Main' M, `Source' F)
         exit(601)
     }
     if (!pathisabs(fn)) fn = pathjoin(M.srcdir, fn)
-    if (!fileexists(fn)) {
-        errprintf("file %s not found\n", fn)
-        ErrorLines(F)
-        exit(601)
-    }
     // determine mode, parse id and options
     _Parse_C_opts(M, F, tag, id, quietly, mata, O)
     LO = M.Lopt
     _collect_log_options(LO, st_local("options"), F)
     // read code and process the block
-    _Parse_C(M, id, mata, O, _Parse_C_do_read(M, fn))
+    _Parse_C(M, id, mata, O, fileexists(fn) ? _Parse_C_do_read(M, fn) :
+        sprintf("// !!! file %s not found !!!\n", fn))
     // create log instance
     if (M.run) _Parse_L(M, F, "", LO, quietly)
     return(`TRUE')
@@ -4287,7 +4283,7 @@ void Extract_code(`Main' M)
         C = asarray(M.C, M.Ckeys[i])
         if (C->O.noextract==`TRUE') continue
         if (C->O.nogap!=`TRUE') {
-            if (j) fput(M.tgt.fh, "") // empty line (unless to of file)
+            if (j) fput(M.tgt.fh, "") // empty line (unless top of file)
         }
         j++
         if (C->O.notitle!=`TRUE') {

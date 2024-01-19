@@ -31,7 +31,11 @@ Installation from GitHub:
 
 Main changes:
 
-    19jan2024 (versipn 1.1.9)
+    19jan2024 (version 1.2.0)
+    - \dostata{file} (and similar) no longer causes error if the file is not found;
+      a "file not found" message is now included in the code
+  
+    19jan2024 (version 1.1.9)
     - options noextract, nogap, notitle/title() added to do_options; these options
       set the behavior of -sttex extract-
     - -sttex extract- did not issue a "file already exists" warning, if the target
