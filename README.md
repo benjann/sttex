@@ -14,6 +14,9 @@ to save computer time. It is also possible to partition a source file into
 independent sections, such that only the sections affected by changes will be
 executed.
 
+For a brief introduction including an example, see the
+[presentation at the 2022 Northern European Stata Conference (DOI: 10.48350/175251)](https://doi.org/10.48350/175251).
+
 To install `sttex` from the SSC Archive, type
 
     . ssc install sttex, replace
@@ -30,6 +33,28 @@ Installation from GitHub:
 ---
 
 Main changes:
+
+04aug2026 (version 1.2.1)
+- new options cmt(), cbf(), and rbf() can now be used to tag comments, commands,
+  and results in logs 
+- noprompt and nogt now also apply to commands within a loop or programm
+- nogt now removes indentation if both noprompt and nogt are specified
+- can now use options pre() and post() to insert extra lines of text at the
+  top and bottom of a log
+- option lcontinue did not work correctly; this is fixed
+- IDs can now be longer than 31 characters
+- IDs can now contain "." (except first character) and "-"
+- \stres*{} now creates a quiet result instance
+- new function \stres{{res [id]}} for custom inclusion of result instance
+- when displaying lines causing error, SMCL interpretation is now turned off and
+  line numbers are printed
+- if Stata code changed in more than one part of the source file between two
+  calls to sttex, it could happen that not all dependencies between parts were
+  resolved (i.e., it could happen that some ancestors or descendants of a
+  changed part were not executed); this is fixed
+- can now type -sttex register- to display the current setting of
+  -sttex register tex-
+- db version is now 1.1.8
 
     19jan2024 (version 1.2.0)
     - \dostata{file} (and similar) no longer causes error if the file is not found;

@@ -1,5 +1,5 @@
 {smcl}
-{* 19jan2024}{...}
+{* 04aug2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -14,6 +14,7 @@
     {help sttex##tags:Dynamic tags} -
     {help sttex##options:Options} -
     {help sttex##remarks:Remarks} -
+    {help sttex##example:Example} -
     {help sttex##author:Author} -
     {help sttex##alsosee:Also see}
 
@@ -140,10 +141,16 @@
 {marker logopts}{col 5}{help sttex##logoptions:{it:log_options}}{col 29}Description
 {synoptline}
 {syntab :Main}
+{synopt:[{cmd:no}]{opt cmt}[{cmd:(}{it:tag}{cmd:)}]}tag comments in log; default is {cmd:nocmt}
+    {p_end}
 {synopt:[{cmd:no}]{opt code}}display code log rather than
     results log; default is {cmd:nocode}
     {p_end}
 {synopt:{opt range(from [to])}}select range of lines from log
+    {p_end}
+{synopt:{opt pre(strlist)}}add extra text at top of log
+    {p_end}
+{synopt:{opt post(strlist)}}add extra text at bottom of log
     {p_end}
 {synopt:{cmd:ltag(}{help sttex##ltag:{it:matchlist}}{cmd:)}}enclose lines in custom tags
     {p_end}
@@ -163,7 +170,11 @@
     {p_end}
 
 {syntab :Results log only}
-{synopt:[{cmd:{ul:no}}]{opt com:mands}}strip all command lines from results log; default is {cmd:commands}
+{synopt:[{cmd:no}]{opt cbf}[{cmd:(}{it:tag}{cmd:)}]}tag command lines; default is {cmd:nocbf}
+    {p_end}
+{synopt:[{cmd:no}]{opt rbf}[{cmd:(}{it:tag}{cmd:)}]}tag results in the output; default is {cmd:norbf}
+    {p_end}
+{synopt:[{cmd:{ul:no}}]{opt com:mands}}strip all command lines from the log; default is {cmd:commands}
     {p_end}
 {synopt:[{cmd:{ul:no}}]{opt pr:ompt}}remove command prompts; default is {cmd:prompt}
     {p_end}
@@ -266,6 +277,10 @@
     sections, such that only the sections affected by changes will be
     executed; see {help sttex##parts:Partition the file into sections} below.
 
+{pstd}
+    For a brief introduction including an example see the slides of the
+    {browse "https://doi.org/10.48350/175251":presentation at the 2022 Northern European Stata Conference}.
+
 {marker register}{...}
 {pstd}
     Typesetting options of {cmd:sttex} require
@@ -283,7 +298,8 @@
     {cmd:sttex register tex} only has to be applied once on a given system
     as {cmd:sttex} remembers the setting between Stata sessions (the setting will
     be stored in a file added to the folder in which {cmd:sttex.ado} resides). To
-    delete the setting, type {cmd:sttex register tex} without argument.
+    delete the setting, type {cmd:sttex register tex} without argument. To display
+    the current setting, type {cmd:sttex register}.
 
 {pstd}
     Furthermore, you may want to add {cmd:stata.sty} to the LaTeX
@@ -328,11 +344,11 @@
     To run a block of Stata commands and, optionally, display the output in the target
     file, type
 
-        {cmd:\begin{c -(}}{it:keyword}{cmd:{c )-}}{cmd:[}{it:id}{cmd:]}{cmd:[}{help sttex##doopts:{it:do_options}}{cmd:]}
+        {cmd:\begin{c -(}}{it:keyword}{cmd:{c )-}}{cmd:[}{help sttex##id:{it:id}}{cmd:]}{cmd:[}{help sttex##doopts:{it:do_options}}{cmd:]}
             {it:commands}
         {cmd:\end{c -(}}{it:keyword}{cmd:{c )-}}
     or
-        {cmd:\do}{it:keyword}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{it:id}{cmd:]}{cmd:[}{help sttex##doopts:{it:do_options}}{cmd:]}
+        {cmd:\do}{it:keyword}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##id:{it:id}}{cmd:]}{cmd:[}{help sttex##doopts:{it:do_options}}{cmd:]}
 
 {pstd}
     where {it:id} provides a custom name for the block. The brackets do not
@@ -403,9 +419,9 @@
 {pstd}
     To include a graph created by the preceding code block, type
 
-        {cmd:\stgraph{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{help sttex##gropts:{it:graph_options}}{cmd:{c )-}}
+        {cmd:\stgraph{cmd:[}}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{help sttex##gropts:{it:graph_options}}{cmd:{c )-}}
     or
-        {cmd:\stgraph*{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{help sttex##gropts:{it:graph_options}}{cmd:{c )-}}
+        {cmd:\stgraph*{cmd:[}}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{help sttex##gropts:{it:graph_options}}{cmd:{c )-}}
 
 {pstd}
     where {it:id} provides a custom name for the graph. The brackets do not need to be typed if
@@ -429,9 +445,9 @@
     To collect the contents of a file created by the preceding code block and
     include it in the target document, type
 
-        {cmd:\stfile{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
+        {cmd:\stfile{cmd:[}}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
     or
-        {cmd:\stfile*{cmd:[}}{it:id}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
+        {cmd:\stfile*{cmd:[}}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{it:filename}{cmd:{c )-}}{cmd:[}{help sttex##fileopts:{it:file_options}}{cmd:]}
 
 {pstd}
     where {it:filename} specifies the name of the file to be collected
@@ -521,16 +537,22 @@
 {pstd}
     Syntax 1: Runtime evaluation
 
-            {cmd:\stres}{cmd:[}{it:id}{cmd:]}{cmd:{c -(}}{it:{help display:display_directive}}{cmd:{c )-}}
+            {cmd:\stres}{cmd:[}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{it:{help display:display_directive}}{cmd:{c )-}}
+        or
+            {cmd:\stres*}{cmd:[}{help sttex##id:{it:id}}{cmd:]}{cmd:{c -(}}{it:{help display:display_directive}}{cmd:{c )-}}
 
 {pmore}
     With this syntax, {cmd:\stres{}} will be evaluated at runtime, i.e. when
     running the Stata commands found in the source file. {cmd:\stres{}} will
     apply Stata's {helpb display} command to {it:{help display:display_directive}}
-    and then replace the tag with the (first 255 characters of the) output. The
-    output will be backed up for future {cmd:sttex} passes, using {it:id} as an
+    and then replace the tag with the (first 255 characters of the) result. The
+    result will be backed up for future {cmd:sttex} passes, using {it:id} as an
     identifier. An automatic name is assigned if {it:id} is omitted; the
-    brackets do not have to be typed if {it:id} is omitted.
+    brackets do not have to be typed if {it:id} is omitted. The difference
+    between {cmd:\stres{}} and {cmd:\stres*{}} is that the latter only creates
+    an instance of the result, but does not write anything to the target
+    document. You may use {helpb sttex##inlexpsp:\stres{{c -(}res{c )-}}} to address a
+    result instance created by {cmd:\stres{}} or {cmd:\stres*{}}.
 
 {pmore}
     Within {it:{help display:display_directive}} you can type {cmd:\%} instead of
@@ -565,8 +587,8 @@
 {pmore}
     Use this syntax for custom inclusion of a Stata log, a collected
     file, or a graph. This may be useful in combination with
-    {cmd:begin{stata*}}...{cmd:\end{stata*}}, {cmd:\stfile*{}}, or
-    {cmd:\stgraph*{}}. {it:keyword} can be one of the following:
+    {cmd:begin{stata*}}...{cmd:\end{stata*}}, {cmd:\stfile*{}},
+    {cmd:\stgraph*{}}, or {cmd:\stres*{}}. {it:keyword} can be one of the following:
 
 {p2colset 14 24 26 2}{...}
 {p2col:{cmd:log}}add the log from Stata block named {it:id}; the last log will
@@ -586,6 +608,9 @@
 {p2col:{cmd:fname}}add the filename used for the collected file (the file will
     be created if needed)
     {p_end}
+{p2col:{cmd:res}}add the inline result named {it:id}; the last result will be
+    used if {it:id} is omitted
+    {p_end}
 
 {pmore}
     The way in which {cmd:\stres{{log}}} puts together the LaTeX code to
@@ -595,10 +620,11 @@
     the graph or collecting the file.
 
 {pmore}
-    Note that a log, graph, or file can be addressed by {cmd:\stres{}} even if it does
-    not yet exist. That is, you can use {cmd:\stres{}} to include a log, graph, or
-    file anywhere in the document, independently of the where in the document
-    the instance of the log, graph, or file is created.
+    Note that a log, graph, file, or result can be addressed by {cmd:\stres{}}
+    even if it does not yet exist. That is, you can use {cmd:\stres{}} to
+    include a log, graph, file, or result anywhere in the document,
+    independently of the where in the document the instance of the log, graph,
+    file, or result is created.
 
 {marker include}{...}
 {dlgtab:Include external file}
@@ -731,7 +757,7 @@
     declaration of dependencies between parts. The syntax is
 
 {p 8 15 2}
-    {cmd:%STpart} [{it:id} [{it:parent}]] [{cmd:,}
+    {cmd:%STpart} [{help sttex##id:{it:id}} [{it:parent}]] [{cmd:,}
     {help sttex##doopts:{it:do_options}}
     {cmdab:gr:opts(}{help sttex##gropts:{it:graph_options}}{cmd:)}
     {cmdab:file:opts(}{help sttex##fileopts:{it:file_options}}{cmd:)} ]
@@ -1011,6 +1037,20 @@
 {dlgtab:Main}
 
 {phang}
+    [{cmd:no}]{opt cmt}[{cmd:(}{it:tag}{cmd:)}] specifies whether to tag
+    comments in the log. Default is {cmd:nocmt}. Type {cmd:cmt} to tag
+    comments using {cmd:{c -(}\textsc{c -(}}{it:...}{cmd:{c )-}{c )-}}; type
+    {cmd:cmt(}{it:tag}{cmd:)} to tag comments using
+    {cmd:{c -(}\}{it:tag}{cmd:{c -(}}{it:...}{cmd:{c )-}{c )-}}. For example,
+    to print comments as gray slanted text, you could include
+
+            {com}\usepackage{xcolor}
+            \def\stcmt#1{\textcolor{gray}{\textsl{#1}}}}{txt}
+
+{pmore}
+    in the preamble of the document and then apply option {cmd:cmt(stcmt)}.
+
+{phang}
     [{cmd:no}]{opt code} specifies whether to use the code log or the
     results log. Default is {cmd:nocode}, that is, to use the results log.
 
@@ -1020,6 +1060,20 @@
     include all remaining lines after {it:from}, you may omit {it:to} or specify
     {it:to} as {cmd:.} (missing). {cmd:range()} is applied after options
     {cmd:drop()}, {cmd:qui()}, and {cmd:oom()} have taken effect.
+
+{phang}
+    {opt pre(strlist)} adds extra text at the top of the log, where
+    {it:strlist} is a space separated list of strings. Each string will create
+    a separate line; use double quotes to specify strings that contain
+    spaces. The lines added by {cmd:pre()} are not taken into account when
+    determining line numbers.
+
+{phang}
+    {opt post(strlist)} adds extra text at the top of the log, where
+    {it:strlist} is a space separated list of strings. Each string will create
+    a separate line; use double quotes to specify strings that contain
+    spaces. The lines added by {cmd:post()} are not taken into account when
+    determining line numbers.
 
 {marker ltag}{...}
 {phang}
@@ -1097,6 +1151,31 @@
     {cmd:continue} is relevant only if {cmd:lnumbers} has been specified.
 
 {dlgtab:Results log only}
+
+{phang}
+    [{cmd:no}]{opt cbf}[{cmd:(}{it:tag}{cmd:)}] specifies whether to tag
+    commands (input) in the log. Default is {cmd:nocbf}. Type {cmd:cbf} to tag
+    commands using {cmd:{c -(}\bftt{c -(}}{it:...}{cmd:{c )-}{c )-}}; type
+    {cmd:cbf(}{it:tag}{cmd:)} to tag commands using
+    {cmd:{c -(}\}{it:tag}{cmd:{c -(}}{it:...}{cmd:{c )-}{c )-}}.
+
+{pmore}
+    Note that {cmd:\bftt} may not have an effect if used with the default
+    typewriter font in LaTeX. For example, include
+
+            {com}\usepackage{courierten}{txt}
+
+{pmore}
+    in the preamble of the document to use a typewriter font that supports
+    bold text. 
+
+{phang}
+    [{cmd:no}]{opt rbf}[{cmd:(}{it:tag}{cmd:)}] specifies whether to tag
+    results (the numbers in a command's output) in the log. Default
+    is {cmd:norbf}. Type {cmd:rbf} to tag results using
+    {cmd:{c -(}\bftt{c -(}}{it:...}{cmd:{c )-}{c )-}}; type
+    {cmd:rbf(}{it:tag}{cmd:)} to tag results using
+    {cmd:{c -(}\}{it:tag}{cmd:{c -(}}{it:...}{cmd:{c )-}{c )-}}. 
 
 {phang}
     [{cmd:no}]{opt commands} specifies whether to remove all command lines from the
@@ -1309,25 +1388,34 @@
 {marker remarks}{...}
 {title:Remarks}
 
-    {help sttex##stable:Use of stable names}
+    {help sttex##id:Use of explicit element names}
     {help sttex##preamble:Preamble of LaTeX file}
     {help sttex##fontsize:Changing the font size of Stata logs}
 
-{marker stable}{...}
-{dlgtab:Use of stable names}
+{marker id}{...}
+{dlgtab:Use of explicit element names}
 
 {pstd}
     {cmd:sttex} generates automatic names for elements such as parts created by {cmd:%STpart},
     logs created by the {cmd:stata} or {cmd:mata} environments, graphs created by
     {cmd:\stgrapph{}}, or inline expressions created by {cmd:\stres{}}. These
     automatic names may not be stable if the order of elements is changed
-    or if elements are remove or inserted, and a change in name will always cause
+    or if elements are removed or inserted, and a change in name will always cause
     the corresponding Stata commands to be executed.
 
 {pstd}
-    To assign stable names, use the {it:id} argument that can be specified when
+    To assign explicit names, use the {it:id} argument that can be specified when
     defining the elements. In this case, changes in order etc. will not change the
-    names, and hence will not lead to unnecessary reevaluation of Stata commands.
+    names, and hence will not lead to unnecessary reevaluation of Stata commands. Using
+    explicit names will also be helpful if you want to reference specific elements
+    in {helpb sttex##parts:%STpart}, {helpb sttex##inlexp:\stres{}}, or 
+    {helpb sttex##stlog:\stlog{}}.
+
+{pstd}
+    {it:id} is similar to a {help varname:variable name}, but it can start with
+    a digit and it can be longer than 32 characters. Furthermore, in addition
+    to _, digits, and (unicode) letters, characters . and - are allowed (but
+    . must not be the first character).
 
 {marker preamble}{...}
 {dlgtab:Preamble of LaTeX file}
@@ -1377,6 +1465,14 @@
     for the text body.
 
 
+{marker example}{...}
+{title:Example}
+
+{pstd}
+    See the slides of the
+    {browse "https://doi.org/10.48350/175251":presentation at the 2022 Northern European Stata Conference}.
+
+
 {marker author}{...}
 {title:Author}
 
@@ -1394,9 +1490,15 @@
     Also see:
 
 {pmore}
-    Jann, B. (2022). sttex – a new dynamic document command for Stata and
+    Jann, B. (2022). sttex: A new dynamic document command for Stata and
     LaTeX. Presentation at the London Stata Conference 2022. Available from
     {browse "http://ideas.repec.org/p/boc/lsug22/14.html"}.
+
+{pmore}
+    Jann, B. (2022). sttex: A new dynamic document command for Stata and
+    LaTeX. Presentation at the 2022 Northern European Stata Conference. Available from
+    {browse "https://ideas.repec.org/p/boc/neur22/11.html"}.
+    {p_end}
 
 
 {marker alsosee}{...}

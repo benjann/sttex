@@ -1,4 +1,4 @@
-*! version 1.2.0  19jan2024  Ben Jann
+*! version 1.2.1  04aug2026  Ben Jann
 
 program sttex
     version 11
@@ -21,6 +21,22 @@ program sttex
 end
 
 program Register
+    if `"`0'"'=="" {
+        local names tex
+        foreach name of local names {
+            di as txt "    `name': " _c
+            capt findfile sttex_register_`name'.txt
+            if _rc di as txt "(not set)"
+            else {
+                tempname fh
+                file open `fh' using `"`r(fn)'"', read
+                file read `fh' location
+                file close `fh'
+                di as res `"`location'"'
+            }
+        }
+        exit
+    }
     gettoken name 0 : 0
     if `"`name'"'!="tex" {
         di as err `"`name' not allowed"'
@@ -34,7 +50,7 @@ program Register
     if `"`location'"'=="" { // delete settings
         capt findfile sttex_register_`name'.txt
         if _rc {
-            di as txt `"(sttex_register_`name'.txt found)"'
+            di as txt `"(sttex_register_`name'.txt not found)"'
             exit
         }
         erase `"`r(fn)'"'
@@ -215,18 +231,20 @@ program _collect_do_options
 end
 
 program _collect_log_options
-    local opts CODE LB GT LNUMbers LCONTinue COMmands PRompt /*
+    local opts CODE LB GT LNUMbers LCONTinue CMT RBF CBF COMmands PRompt /*
         */ LSkip TEXman VERBatim STATic BEGIN END BEAMER
     foreach o of local opts {
         local noopts `noopts' NO`o'
     }
     syntax [, `noopts' `opts' ///
         range(numlist int max=2 >=0 missingok ascending) ///
+        pre(str asis) post(str asis) ///
         ltag(str asis) ///
         tag(str asis) ///
         alert(str asis) ///
         SUBStitute(str asis) ///
         LNUMbers2(passthru) ///
+        CMT2(str) RBF2(str) CBF2(str) ///
         drop(numlist int missingokay) ///
         cnp(numlist int missingokay) ///
         qui(numlist int missingokay) ///
@@ -237,9 +255,9 @@ program _collect_log_options
         scale(numlist max=1 >0 missingok) ///
         BLstretch(numlist max=1 missingok) ]
     _collect_parse_range `range'
-    if `"`lnumbers2'"'!=""  local lnumbers lnumbers
-    if `"`begin2'"'!=""     local begin begin
-    if `"`end2'"'!=""       local end   end
+    foreach o in lnumbers cmt rbf cbf begin end {
+        if `"``o'2'"'!=""  local `o' `o'
+    }
     foreach o of local opts {
         local opt = strlower("`o'")
         if "``opt''"!="" & "`no`opt''"!="" {
@@ -249,10 +267,15 @@ program _collect_log_options
         c_local `opt' `no`opt'' ``opt''
     }
     c_local range      `range'
+    c_local pre        `"`macval(pre)'"'
+    c_local post       `"`macval(post)'"'
     c_local ltag       `"`macval(ltag)'"'
     c_local tag        `"`macval(tag)'"'
     c_local alert      `"`macval(alert)'"'
     c_local substitute `"`macval(substitute)'"'
+    c_local cmt2       `"`macval(cmt2)'"'
+    c_local rbf2       `"`macval(rbf2)'"'
+    c_local cbf2       `"`macval(cbf2)'"'
     c_local drop       `drop'
     c_local cnp        `cnp'
     c_local qui        `qui'
@@ -704,7 +727,8 @@ struct `TAG' {
 
 // inline expression tags: tags within \stres{{}}
 struct `ITAG' {
-    `Str'       log,        // log include
+    `Str'       res,        // immediate result include
+                log,        // log include
                 lognm,      // log name
                 graph,      // graph include
                 graphnm,    // graph name (without suffix)
@@ -845,6 +869,14 @@ struct `LOPT' {
     `Int'       clsize      // linesize for (non-verbatim) code log
     `Real'      scale,      // rescaling factor
                 blstretch   // line spacing
+    // added in database version 1.1.8
+    `Bool'      cmt,         // italicize comments
+                rbf,         // make results bold
+                cbf          // make commands (input) bold
+    `Str'       CMT,         // tag used by cmt
+                RBF,         // tag used by rbf
+                CBF          // tag used by cbf
+    `StrC'      pre, post    // extra text to be added at top and bottom of log
 }
 
 // structure for graphs
@@ -896,7 +928,7 @@ struct `CMDLINE' {
     `Str'       l,  // inline comment start (/*)
                 r,  // inline commend end (*/)
                 lb, // line break comment (///)
-                eol // end of line comment (//)
+                el  // end of line comment (//)
     `TokEnv'    t
 }
 
@@ -1164,7 +1196,7 @@ void Process()
     M.tag.stgraphq  = M.tag.cs + "stgraph*"
     M.tag.stcfile   = M.tag.cs + "stfile"
     M.tag.stcfileq  = M.tag.cs + "stfile*"
-    M.tag.stres     = M.tag.cs + "stres"
+    M.tag.stres     = M.tag.cs + "stres" // 5 chars assumed by _Parse_I()!
     M.tag.stinput   = M.tag.cs + "stinput"
     M.tag.stappend  = M.tag.cs + "stappend"
     M.tag.endinput  = M.tag.cs + "endinput"
@@ -1175,6 +1207,7 @@ void Process()
     M.tag.env       = ("stata", "stata*", "mata", "mata*")'
     
     // inline expression tags
+    M.Itag.res      = "res"
     M.Itag.log      = "log"
     M.Itag.lognm    = "logname"
     M.Itag.graph    = "graph"
@@ -1218,8 +1251,8 @@ void Process()
     // - for reading argument within {} or []
     M.t2 = tokeninit("", ("{", "}", "[", "]"))
     // - command-line tokeninit()
-    M.t.l = "/*"; M.t.r = "*/"; M.t.lb = " ///"; M.t.eol  = " //"
-    M.t.t = tokeninit("", (M.t.l, M.t.r, M.t.lb, M.t.eol))
+    M.t.l = "/*"; M.t.r = "*/"; M.t.lb = "///"; M.t.el = "//"
+    M.t.t = tokeninit("", (M.t.l, M.t.r, M.t.lb, M.t.el))
     
     // db and associative arrays for code, logs, graphs, and inline expressions
     M.update = `FALSE'
@@ -1309,6 +1342,9 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     _collect_onoff_option("nogt"      , O.nogt)
     _collect_onoff_option("lnumbers"  , O.lnumbers)
     _collect_onoff_option("lcontinue" , O.lcont)
+    _collect_onoff_option("cmt"       , O.cmt)
+    _collect_onoff_option("rbf"       , O.rbf)
+    _collect_onoff_option("cbf"       , O.cbf)
     _collect_onoff_option("nocommands", O.nocommands)
     _collect_onoff_option("noprompt"  , O.noprompt)
     _collect_onoff_option("nolskip"   , O.nolskip)
@@ -1323,18 +1359,26 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     if (st_local("scale")!="")      O.scale = strtoreal(st_local("scale"))
     if (st_local("blstretch")!="")  O.blstretch = strtoreal(st_local("blstretch"))
     // multivalued numeric option (J(1,0,.) if not specified)
-    if (st_local("range")!="") O.range = strtoreal(tokens(st_local("range")))
-    if (st_local("drop")!="")  O.drop  = strtoreal(tokens(st_local("drop")))
-    if (st_local("cnp")!="")   O.cnp   = strtoreal(tokens(st_local("cnp")))
-    if (st_local("qui")!="")   O.qui   = strtoreal(tokens(st_local("qui")))
-    if (st_local("oom")!="")   O.oom   = strtoreal(tokens(st_local("oom")))
+    if (st_local("range")!="")  O.range = strtoreal(tokens(st_local("range")))
+    if (st_local("drop")!="")   O.drop  = strtoreal(tokens(st_local("drop")))
+    if (st_local("cnp")!="")    O.cnp   = strtoreal(tokens(st_local("cnp")))
+    if (st_local("qui")!="")    O.qui   = strtoreal(tokens(st_local("qui")))
+    if (st_local("oom")!="")    O.oom   = strtoreal(tokens(st_local("oom")))
     // suffix for line numbers: set to empty string if specified as ""
     if (st_local("haslsuffix")!="") O.lsuffix = st_local("lnumbers2")
     // string options ("" if not specified)
-    if (st_local("begin2")!="")     O.Begin   = st_local("begin2")
-    if (st_local("end2")!="")       O.End     = st_local("end2")
-    // multivalues string options (J(1,0,"") if not specified)
-    if (st_local("alert")!="")      O.alert = tokens(st_local("alert"))'
+    if (st_local("cmt2")!="")   O.CMT    = st_local("cmt2")
+    else if (O.cmt==`TRUE')     O.CMT    = "textsl"
+    if (st_local("rbf2")!="")   O.RBF    = st_local("rbf2")
+    else if (O.rbf==`TRUE')     O.RBF    = "bftt"
+    if (st_local("cbf2")!="")   O.CBF    = st_local("cbf2")
+    else if (O.cbf==`TRUE')     O.CBF    = "bftt"
+    if (st_local("begin2")!="") O.Begin  = st_local("begin2")
+    if (st_local("end2")!="")   O.End    = st_local("end2")
+    // multivalued string options (J(1,0,"") if not specified)
+    if (st_local("pre")!="")    O.pre    = tokens(st_local("pre"))'
+    if (st_local("post")!="")   O.post   = tokens(st_local("post"))'
+    if (st_local("alert")!="")  O.alert  = tokens(st_local("alert"))'
     // dictionary string options (J(0,0,"") if not specified)
     if (st_local("ltag")!="") O.ltag =
         _parse_ltag_option(st_local("ltag"), F, init)
@@ -1541,7 +1585,7 @@ void DatabaseWrite(`Main' M)
     st_local("dbfile", M.db.fn)
     // open DB and write header
     M.db.fh = FOpen(M.db.fn, "w", "", 1)
-    fput(M.db.fh, "stTeX database version 1.1.7")
+    fput(M.db.fh, "stTeX database version 1.1.8")
     // write keys and associative arrays
     fputmatrix(M.db.fh, M.Ckeys);  fputmatrix(M.db.fh, M.C)
     fputmatrix(M.db.fh, M.Lkeys);  fputmatrix(M.db.fh, M.L)
@@ -1582,6 +1626,10 @@ void DatabaseWrite(`Main' M)
         M.CFkeys0 = fgetmatrix(M.db.fh); M.CF = fgetmatrix(M.db.fh)
     }
     else M.CF = asarray_create()
+    // if (v<8) {
+    //     struct LOPT has additional elements in db version 1.1.8; no action
+    //     needed (because the new elements are at the end)
+    // }
     FClose(M.db.fh)
     return(1)
 }
@@ -1716,7 +1764,7 @@ void Parse_Part(`Main' M, `Source' F)
         if (tok!=",") {
             id = tok
             if (id==".") id = ""
-            else if (!st_islmname(id)) {
+            else if (!_isidname(id)) {
                 errprintf("'%s' invalid name\n", id)
                 ErrorLines(F)
                 exit(7)
@@ -1726,7 +1774,7 @@ void Parse_Part(`Main' M, `Source' F)
         if (tok!=",") {
             pid = tok
             if (pid!="." & pid!="") {
-                if (!st_islmname(pid)) {
+                if (!_isidname(pid)) {
                     errprintf("'%s' invalid name\n", pid)
                     ErrorLines(F)
                     exit(7)
@@ -1951,7 +1999,7 @@ void _Parse_C_opts(`Main' M, `Source' F, `Str' tag, `Str' id, `Bool' quietly,
     _collect_do_options(M, O, opts, F)
     if (id=="") id = (M.P.j>1 ? M.P.id[M.P.j] + M.punct : "") + 
                      strofreal(M.c)
-    else if (!st_islmname(id)) {
+    else if (!_isidname(id)) {
         errprintf("'%s' invalid name\n", id)
         ErrorLines(F)
         exit(7)
@@ -2221,6 +2269,8 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
         if (!chflag) {
             if      ((L->O.code==`TRUE')!=(O.code==`TRUE'))      chflag = `TRUE'
             else if  (L->O.range!=O.range)                       chflag = `TRUE'
+            else if  (L->O.pre!=O.pre)                           chflag = `TRUE'
+            else if  (L->O.post!=O.post)                         chflag = `TRUE'
             else if  (L->O.ltag!=O.ltag)                         chflag = `TRUE'
             else if  (L->O.tag!=O.tag)                           chflag = `TRUE'
             else if  (L->O.alert!=O.alert)                       chflag = `TRUE'
@@ -2229,6 +2279,8 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
             else if ((L->O.nogt==`TRUE')!=(O.nogt==`TRUE'))      chflag = `TRUE'
             else if  (L->O.drop!=O.drop)                         chflag = `TRUE'
             else if  (L->O.cnp!=O.cnp)                           chflag = `TRUE'
+            else if ((L->O.cmt==`TRUE')!=(O.cmt==`TRUE'))        chflag = `TRUE'
+            else if (L->O.CMT!=O.CMT)                            chflag = `TRUE'
             else if ((L->O.lnumbers==`TRUE')!=
                         (O.lnumbers==`TRUE'))                    chflag = `TRUE'
             else if (O.lnumbers==`TRUE') {
@@ -2246,7 +2298,11 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
                 }
             }
             else {
-                if      ((L->O.nocommands==`TRUE')!=
+                if      ((L->O.rbf==`TRUE')!=(O.rbf==`TRUE'))    chflag = `TRUE'
+                else if (L->O.RBF!=O.RBF)                        chflag = `TRUE'
+                else if ((L->O.cbf==`TRUE')!=(O.cbf==`TRUE'))    chflag = `TRUE'
+                else if (L->O.CBF!=O.CBF)                        chflag = `TRUE'
+                else if ((L->O.nocommands==`TRUE')!=
                             (O.nocommands==`TRUE'))              chflag = `TRUE'
                 else if ((L->O.noprompt==`TRUE')!=
                          (O.noprompt==`TRUE'))                   chflag = `TRUE'
@@ -2285,7 +2341,7 @@ void _Parse_L_clear(`Log' L)
     F.i0 = F.i
     id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     if (id!="") {
-        if (!st_islmname(id)) {
+        if (!_isidname(id)) {
             errprintf("'%s' invalid name\n", id)
             ErrorLines(F)
             exit(7)
@@ -2441,7 +2497,7 @@ void _Parse_G_store(`Main' M, `Str' id, `Gopt' O, `StrC' fn, `Bool' nodo)
     F.i0 = F.i
     id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     if (id!="") {
-        if (!st_islmname(id)) {
+        if (!_isidname(id)) {
             errprintf("'%s' invalid name\n", id)
             ErrorLines(F)
             exit(7)
@@ -2593,12 +2649,20 @@ void Parse_I(`Main' M, `Source' F)
 
 void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
 {
-    `Bool'  rc; `Unset' rc
-    `Str'   id, exp
+    `Bool' rc; `Unset' rc
+    `Bool' quietly
+    `Str'  id, exp
 
-    // get exp and id from \stres{exp}[id]
+    // get exp and id from \stres[id]{exp}
     F.i0 = F.i
-    tokenset(M.t1, substr(s, p+6, .))
+    if (substr(s, p+6, 1)=="*") {
+        quietly = `TRUE'
+        tokenset(M.t1, substr(s, p+7, .))
+    }
+    else {
+        quietly = `FALSE'
+        tokenset(M.t1, substr(s, p+6, .))
+    }
     id = TabTrim(Get_Arg(M, "[", "]", F)) // ignore errors
     exp = Get_Arg(M, "{", "}", F, rc)
     if (rc) { // invalid syntax => move on
@@ -2610,12 +2674,13 @@ void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
     exp = subinstr(exp, "\%", "%") // so that Stata formats can be typed as \%
     s = tokenrest(M.t1) // remainder of line for further processing
     if (substr(exp,1,1)=="{" & substr(exp,strlen(exp),1)=="}") {
-        _Parse_I_immediate(M, exp, F)   // immediate expression
+        // immediate expression (* and [id] will be ignored)
+        _Parse_I_immediate(M, exp, F) 
         return
     }
     (void) M.i++ // inline expression counter
     if (id=="") id = (M.P.j>1 ? M.P.id[M.P.j] + M.punct : "") + strofreal(M.i)
-    else if (!st_islmname(id)) {
+    else if (!_isidname(id)) {
         errprintf("'%s' invalid name\n", id)
         ErrorLines(F)
         exit(7)
@@ -2632,7 +2697,7 @@ void _Parse_I(`Main' M, `Str' s, `Int' p, `Source' F)
         fput(M.dof.fh, M.Ltag.Iend)
     }
     // add insert tag to LaTeX file
-    fwrite(M.tex.fh, M.Ttag.I + id + M.Ttag.Iend)
+    if (quietly!=`TRUE') fwrite(M.tex.fh, M.Ttag.I + id + M.Ttag.Iend)
     // update database
     _Parse_I_store(M, id, exp)
     AppendElement(M.Ikeys, M.ikeys, id) // increases counter by 1
@@ -2646,6 +2711,11 @@ void _Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
     exp = TabTrim(substr(exp,2,strlen(exp)-2)) // strip outer { }
     tokenset(M.t1, exp)
     nm = tokenget(M.t1)
+    if (nm==M.Itag.res) {
+        id = _Parse_I_imid(F, tokenrest(M.t1), M.Ikeys, M.ikeys, "res")
+        fwrite(M.tex.fh, M.Ttag.I + id + M.Ttag.Iend)
+        return
+    }
     if (anyof((M.Itag.log, M.Itag.lognm), nm)) {
         id = _Parse_I_imid(F, tokenrest(M.t1), M.Lkeys, M.lkeys, "log")
         if (nm==M.Itag.log) fwrite(M.tex.fh, M.Ttag.L + id + M.Ttag.Lend)
@@ -2683,7 +2753,7 @@ void _Parse_I_immediate(`Main' M, `Str' exp, `Source' F)
             exit(499)
         }
     }
-    else if (!st_islmname(subinstr(id,".","_"))) {
+    else if (!_isidname(subinstr(id,".","_"))) {
         errprintf("'%s' invalid name\n", id)
         ErrorLines(F)
         exit(7)
@@ -2858,7 +2928,7 @@ void UpdateRunFlags(`Parts' P)
     `BoolC'   up, dwn
     `AsArray' A
     
-    up = dwn = P.run
+    up = dwn = J(P.j, 1, 0)
     // upstream updating
     A = asarray_create()
     asarray_notfound(A, .)
@@ -2882,7 +2952,7 @@ void UpdateRunFlags(`Parts' P)
         UpdateDwnstream(P.id, A, dwn, j)
     }
     // store result
-    P.run = (up+dwn):!=0
+    P.run = (P.run+up+dwn):!=0
 }
 
 void UpdateUpstream(`StrC' pid, `AsArray' A, `BoolC' up, `Int' j0)
@@ -3135,11 +3205,16 @@ void Collect_I(`Main' M, `Source' F, `Str' id)
         S[1] = "{com}"+S[1]
     }
     else S = J(0, 1, "")
-    // apply texman and add to database
-    S = Apply_Texman(S, 255)
-    // find first line of output
-    (void) _Format_log_read_cmd(M, S, i = 1, rows(S), `FALSE', `FALSE')
-    i++
+    // apply texman
+    S = Apply_Texman(S, 255, `FALSE')
+    // collect result
+    i = 2
+    /* could use the following to find the first line of output if the display
+       command is longer than 255 chars:
+        (void) _Format_log_read_cmd(M, S, i = 1, rows(S), `FALSE', `FALSE',
+            `FALSE', `FALSE', `FALSE', "")
+        i++
+    */
     if (i<=rows(S)) {
         S = strtrim(S[i])
         if (S=="{\smallskip}") S = "" // display evaluated to empty string
@@ -3151,17 +3226,19 @@ void Collect_I(`Main' M, `Source' F, `Str' id)
 }
 
 // use log texman to translate SMCL to TeX
-`StrC' Apply_Texman(`StrC' S, `Int' linesize)
+`StrC' Apply_Texman(`StrC' S, `Int' linesize, `Bool' yebf)
 {
-    `Str' fn1, fn2, lsize
+    `Str' fn1, fn2, opts
     
     fn1 = st_tempfilename()
     fn2 = st_tempfilename()
     Fput(fn1, S)
-    if (linesize<.) lsize = strofreal(linesize)
-    else            lsize = strofreal(st_numscalar("c(linesize)"))
+    opts = "replace"
+    if (yebf==`TRUE') opts = opts + " yebf"
+    if (linesize<.) opts = opts + " ll("+ strofreal(linesize) + ")"
+    else opts = opts + " ll("+ strofreal(st_numscalar("c(linesize)")) + ")"
     stata("qui log texman " + "`" + `"""' + fn1 + `"""' + "'" +
-        "`" + `"""' + fn2 + `"""' + "'" + ", replace ll(" + lsize + ")")
+        "`" + `"""' + fn2 + `"""' + "'" + ", " + opts)
     return(Cat(fn2))
 }
 
@@ -3189,9 +3266,10 @@ void Format(`Main' M)
 {
     `Int' i
     
-    // need to use subfunction so that pointer to S will be distinct
-    for (i=M.lkeys;  i; i--) _Format(M, M.Lkeys[i])
-    for (i=M.cfkeys; i; i--) _Format_CF(M, M.CFkeys[i])
+    // need to use subfunction so that pointer to S will be distinct;
+    // need to process logs in forward order because of lcontinue
+    for (i=1; i<=M.lkeys; i++) _Format(M, M.Lkeys[i])
+    for (i=M.cfkeys; i; i--)   _Format_CF(M, M.CFkeys[i])
 }
 
 void _Format(`Main' M, `Str' id)
@@ -3221,6 +3299,8 @@ void _Format(`Main' M, `Str' id)
     _Format_tag(S, L->O.tag)
     // add line numbers, select range, apply line tags
     _Format_lnum(S, *L, M.lnum)
+    // add extra text at top and bottom of log
+    _Format_prepost(S, *L, L->O.pre, L->O.post)
     // check whether edited log needs to be saved
     if (S!=*S0) L->log = &S
     else        L->log = S0
@@ -3253,7 +3333,7 @@ void _Format_check_newlog(`Main' M, `Log' L)
 }
 
 // check whether line numbers need updating (e.g. if order of elements changed
-// or locnt status changed for preceding elements); also updates M.lnum
+// or lcont status changed for preceding elements); also updates M.lnum
 void _Format_check_lnum(`Main' M, `Log' L)
 {
     `Int' r
@@ -3274,7 +3354,7 @@ void _Format_check_lnum(`Main' M, `Log' L)
 
 // copy raw logs from referenced code blocks; working from bottom to top such
 // that first block will be processed last (i.e. the function will return with
-// S0 set to the pointer off the raw log of the first code block)
+// S0 set to the pointer of the raw log of the first code block)
 `Bool' _Format_get_log(`Main' M, `Log' L, `StrC' S, `pStrC' S0)
 {
     `Int'   i
@@ -3286,7 +3366,7 @@ void _Format_check_lnum(`Main' M, `Log' L)
     if (L.O.code!=`TRUE') {
         for (; i; i--) {
             C = asarray(M.C, L.ids[i])
-            S0 = _Format_get_log_tex(M, *C, L.ids[i])
+            S0 = _Format_get_log_tex(M, *C, L.ids[i], L.O.rbf)
             if (S0==NULL) return(1) // no log available
             S = *S0 \ S
         }
@@ -3302,13 +3382,13 @@ void _Format_check_lnum(`Main' M, `Log' L)
 }
 
 // translate SMCL log to tex
-`pStrC' _Format_get_log_tex(`Main' M, `Code' C, `Str' id)
+`pStrC' _Format_get_log_tex(`Main' M, `Code' C, `Str' id, `Bool' rbf)
 {
     `pStrC' S
     
     if (asarray_contains(M.Ltex, id)) return(asarray(M.Ltex, id))
     if (C.log==NULL) return(NULL)
-    S = &(Apply_Texman(*C.log, C.O.linesize))
+    S = &(Apply_Texman(*C.log, C.O.linesize, rbf))
     asarray(M.Ltex, id, S)
     return(S)
 }
@@ -3318,13 +3398,15 @@ void _Format_check_lnum(`Main' M, `Log' L)
 // process log file
 void _Format_log(`Main' M, `Log' L, `StrC' S)
 {
-    `Bool'  inmata, hasoom
+    `Bool'  inmata, hasoom, cmt
     `BoolC' p
-    `Int'   i, j, r, k, K
+    `Int'   i, j, r
     `IntM'  idx
     `Str'   s, prompt
+    `StrR'  CMT
 
     if ((r=rows(S))<1) return
+    if (cmt=(L.O.cmt==`TRUE')) CMT = ("{\"+L.O.CMT+"{", "}}")
     p = J(r, 1, `TRUE')
     idx = J(r, 4, .) // index table: start of cmd, end of cmd, end of output, has oom
     prompt = substr(S[1], 1, 2)
@@ -3357,33 +3439,17 @@ void _Format_log(`Main' M, `Log' L, `StrC' S)
                 continue
             }
         }
-        // read command line (and strip line break comments)
+        // read command line and apply nolb, noprompt, nogt, and cmt
         ++j
-        idx[j, 1] = i   // first line of commands
-        s = _Format_log_read_cmd(M, S, i, r, inmata, L.O.nolb==`TRUE')
+        idx[j, 1] = i   // first line of command
+        s = _Format_log_read_cmd(M, S, i, r, inmata, L.O.nolb==`TRUE',
+            L.O.noprompt==`TRUE', L.O.nogt==`TRUE', cmt, CMT)
         idx[j, 2] = i   // last line of command
         // nocommands option
         if (L.O.nocommands==`TRUE') {
             p[|idx[j,1] \ i|] = J(i-idx[j,1]+1, 1, `FALSE')
         }
-        // nogt/noprompt option
-        else {
-            if (L.O.noprompt==`TRUE') {
-                // remove prompt in first line of command
-                k = idx[j, 1]
-                if (substr(S[k],1,2)==prompt) S[k] = substr(S[k],3,.)
-            }
-            if (L.O.nogt==`TRUE') {
-                // remove "> " in second and following lines of command
-                k = idx[j, 1] + 1
-                K = idx[j, 2]
-                for (; k<=K; k++) {
-                    if (substr(S[k],1,2)=="> ") S[k] = "  " + substr(S[k],3,.)
-                }
-            }
-        }
         // update mata status
-        s = strtrim(s)
         if (!inmata) {
             if (substr(s,1,4)=="mata") { // "mata", "mata:", or "mata<blanks>:"
                 s = substr(s,5,.)
@@ -3404,6 +3470,10 @@ void _Format_log(`Main' M, `Log' L, `StrC' S)
         idx[j, 3] = i   // last line of output
     }
     idx = idx[|1,1\j,.|]
+    // handle cbf
+    if (L.O.cbf==`TRUE') _Format_log_cbftag(S, idx, L.O.CBF)
+    // handle rbf
+    if (L.O.rbf==`TRUE') _Format_log_rbftag(S, idx, L.O.RBF)
     // handle SToom
     if (hasoom) {
         r = rows(idx)
@@ -3419,6 +3489,36 @@ void _Format_log(`Main' M, `Log' L, `StrC' S)
     if (length(L.O.oom))  _Format_log_edit(L.O.oom,  S, p, idx, 4)
     // select relevant output
     S = select(S, p)
+}
+
+void _Format_log_cbftag(`StrC' S, `IntM' idx, `Str' tag)
+{
+    `Int' j, a, b
+    `Str' left, right
+    
+    left = "{\"+tag+"{" /*}}*/
+    right = /*{{*/ "}}"
+    for (j=rows(idx); j; j--) {
+        a = idx[j,1]
+        b = idx[j,2]
+        S[|a\b|] = left :+ S[|a\b|] :+ right
+    }
+}
+
+void _Format_log_rbftag(`StrC' S, `IntM' idx, `Str' tag)
+{
+    `Int' j, a, b
+    `Str' from, to
+    
+    if (tag=="bftt") return
+    from = "{\bftt{" /*}}*/
+    to   = "{\"+tag+"{" /*}}*/
+    for (j=rows(idx); j; j--) {
+        a = idx[j,2] + 1
+        b = idx[j,3]
+        if (a>b) continue
+        S[|a\b|] = subinstr(S[|a\b|], from, to)
+    }
 }
 
 void _Format_log_edit(`IntR' K, `StrC' S, `BoolC' p, `IntM' idx, `Int' opt)
@@ -3498,126 +3598,178 @@ void _Format_log_insertrows(`StrC' S, `BoolC' p, `Int' i, `Int' n)
     }
 }
 
-// read command in log and optionally strip line break comments
-// (numbered command lines in loops and programs: processes the
-// entire block, but only returns the first command)
-`Str' _Format_log_read_cmd(`Main' M, `StrC' S, `Int' i, `Int' r, 
-    `Bool' inmata, `Bool' lbstrip) 
+// read command in log and optionally strip line break comments, command
+// prompts, and continuation symbols, and tag comments (loops and programs: the
+// entire block is processes, but only the first command is returned)
+`Str' _Format_log_read_cmd(`Main' M, `StrC' S, `Int' i, `Int' r, `Bool' inmata,
+    `Bool' nolb, `Bool' nopr, `Bool' nogt, `Bool' cmt, `StrR' CMT)
 {
-    `Int'  lb, cb, j, num, stub
-    `Str'  s, stmp, cmd
+    `Bool' iscmt, lb, el
+    `Int'  cb, j, k, num, stub; `Unset' stub
+    `Str'  s
+    `StrR' cmd
     
-    stub = 2
-    j = lb = cb = num = 0
-    cmd = s = _Format_log_read_cmdline(M, substr(S[i],3,.), cb, lb, inmata, "")
+    cmd = J(1,5,"") // record up to 5 lines of (first) command
+    j = k = cb = num = 0
+    lb = el = `FALSE'
+    s = _Format_cmdline(S, i, M.t, 2, cb, lb, el, nolb, cmt, CMT)
+    iscmt = _Format_cmdiscmt(inmata, s, S, i, 2, cmt, CMT) 
+    cmd[++k] = s
+    if (nopr) S[i] = substr(S[i], 3, .)
     while (1) {
-        if (lbstrip) {
-            if (lb) S[i] = substr(S[i], 1, stub) + substr(S[i], stub+1, lb-2)
-            stub = 2
-        }
-        if (i==r) return(cmd)
-        stmp = S[i+1]
-        if (substr(stmp,1,2)!="> ") {
-            if (substr(stmp,1,2)!=". ") {
-                num = _Format_log_check_numcmd(stmp, num, stub)
-                if (num==0) return(cmd)
-                j++; s = "" // start new command
+        if (i==r) return(strtrim(invtokens(cmd[|1\k|],""))) // end of file
+        if (substr(S[i+1],1,2)=="> ") { // cmd continues on next line
+            i++
+            if (el) { // continuation of end of line comment
+                if (cmt) _Format_cmdline_ctag(S, i, 2, CMT)
             }
-            else if (num==0) return(cmd)
-            else stmp = substr(stmp,3,.)
+            else { // other type of continuation
+                s = _Format_cmdline(S, i, M.t, 2, cb, lb, el, nolb, cmt, CMT)
+                if (!iscmt) {; if (!j) {; if (k<5) cmd[++k] = s; }; }
+                else if (cmt) _Format_cmdline_ctag(S, i, 2, CMT)
+            }
+            if (nogt) S[i] = (nopr ? "" : "  ") + substr(S[i], 3, .)
         }
-        else stmp = substr(stmp,3,.)
-        i++
-        stmp = _Format_log_read_cmdline(M, stmp, cb, lb, inmata, s)
-        s = s + (cb ? "" : (s!="" ? " " : "")) + stmp
-        if (j==0) cmd = s
+        else if (inmata) return(strtrim(invtokens(cmd[|1\k|],""))) // end of cmd
+        else if (_Format_cmdinblock(S[i+1], num, stub)) { // sets num and stub
+            // start of new cmd within block (loop/program)
+            j++; cb = lb = el = 0
+            s = _Format_cmdline(S, ++i, M.t, stub, cb, lb, el, nolb, cmt, CMT)
+            iscmt = _Format_cmdiscmt(inmata, s, S, i, stub, cmt, CMT)
+            if (nopr) S[i] = substr(S[i], stub+1, .)
+        }
+        else return(strtrim(invtokens(cmd[|1\k|],""))) // end of cmd
     }
-    return(cmd)
 }
 
-// check whether line starts with "  #. " (loops and program definitions)
-`Int' _Format_log_check_numcmd(`Str' s, `Int' num, `Int' stub)
+// handle *...
+`Bool' _Format_cmdiscmt(`Bool' inmata, `Str' s, `StrC' S, `Int' i, `Int' stub,
+    `Bool' cmt, `StrR' CMT)
 {
-    num++
-    if (__Format_log_check_numcmd(s, num, stub)==0) {
-        if (num>1) return(0)
-        num++ // loops (e.g. foreach) start with 2, not with 1
-        if (__Format_log_check_numcmd(s, num, stub)==0) return(0)
-    }
-    return(num)
+    if (inmata) return(`FALSE')
+    if (substr(strtrim(s),1,1)!="*") return(`FALSE')
+    s = substr(s, 1, strpos(s,"*") - 1)
+    if (cmt) _Format_cmdline_ctag(S, i, stub, CMT)
+    return(`TRUE')
 }
-`Bool' __Format_log_check_numcmd(`Str' s, `Int' num, `Int' stub)
+
+// check whether line starts with ". " or "  #. " (loops and programs)
+`Bool' _Format_cmdinblock(`Str' s, `Int' num, `Int' l)
 {
-    `Bool' match
-    `Int'  l, w
+    `Int'  w
     `Str'  n
     
-    n = strofreal(num)
+    // unnumbered command
+    l = 2
+    if (substr(s,1,l)==". ") {
+        if (num) return(`TRUE') // within block
+        return(`FALSE')         // not within block
+    }
+    // first numbered command
+    if (!num) {
+        l = 5
+        if (substr(s,1,l)=="  1. ") {; num = 1; return(`TRUE'); }
+        // loops (e.g. foreach) start with 2, not with 1
+        if (substr(s,1,l)=="  2. ") {; num = 2; return(`TRUE'); }
+        return(`FALSE')
+    }
+    // next numbered command
+    n = strofreal(++num)
     l = strlen(n)
-    w = max((0, 3-l))
-    stub = l+w+2
-    match = substr(s, 1, stub)==(w*" "+n+". ")
-    if (match) s = substr(s, stub+1, .)
-    return(match)
+    w = max((0, 3 - l))
+    l = l + w + 2
+    if (substr(s,1,l)==(w*" "+n+". ")) return(`TRUE')
+    // should never be reached
+    return(`FALSE')
 }
 
-// read a Stata command line and strip comments taking account of quotes
-`Str' _Format_log_read_cmdline(
-    `Main' M,
-    `Str'  s,          // command line to be parsed
-    `Int'  cb,         // will be set to nesting level of /*...*/
-    `Int'  lb,         // will be set to position of ///...
-    `Bool' nostar,     // do not parse "*..."
-    `Str'  cmd0)       // piece of command from previous line
-{   
-    `Str' cmd
+// extract command without comments from command line; optionally tag comments
+// in command line and remove line-break comment
+`Str' _Format_cmdline(
+    `StrC'    S,
+    `Int'     i,     // line of S to be parsed
+    `Cmdline' t,     // structure for tokenget()
+    `Int'     stub,  // length of stub
+    `Int'     cb,    // will be set to nesting level of /*...*/
+    `Bool'    lb,    // will be set to 1 if line ends in /// comment
+    `Bool'    el,    // will be set to 1 if line ends in // comment
+    `Bool'    nolb,  // remove line-break comment
+    `Bool'    cmt,   // tag comments
+    `StrR'    CMT)   // comment tag (left, right)
+{
+    `Str' tok, res
+    `Int' p, o
     
-    if (cb==0) {
-        if (substr(s,1,3)=="///") { // line starting with ///
-            lb = 1
-            return("")
-        }
-        if (substr(s,1,2)=="//") {  // line starting with //
-            lb = 0
-            return("")
-        }
+    res = ""
+    lb = el = `FALSE'
+    o = 0
+    tokenset(t.t, S[i])
+    tokenoffset(t.t, stub + 1)
+    if (cmt) { // open comment tag if line starts with open /*...*/
+         if (cb) _Format_cmdline_cbtag(S, i, CMT[1], stub, o)
     }
-    cmd = __Format_log_read_cmdline(M.t, s, cb, lb)
-    if (nostar==`FALSE') {
-        if (cmd0=="") {
-            if (substr(strltrim(cmd),1,1)=="*") {   // line starting with *...
-                cb = 0; lb = 0
-                return(substr(cmd,1,strpos(cmd,"*")-1))
+    while ((tok = tokenget(t.t))!="") {
+        if (tok==t.l) { // check for /*
+            cb++
+            if (cmt) { // open comment tag if start of /*...*/
+                if (cb==1) _Format_cmdline_cbtag(S, i, CMT[1],
+                    tokenoffset(t.t) + o - 3, o)
             }
         }
-    }
-    return(cmd)
-}
-
-`Str' __Format_log_read_cmdline(`Cmdline' t, `Str' s, `Int' cb, `Int' p)
-{
-    `Str' res; `Unset' res
-    `Str' tok
-    
-    p = 0
-    tokenset(t.t, s)
-    while ((tok = tokenget(t.t))!="") {
-        if (tok==t.l) cb++
         else if (cb) {
-            if (tok==t.r) cb--
+            if (tok==t.r) { // check for */
+                cb--
+                if (cmt) { // close comment tag if end of /*...*/
+                    if (cb==0) _Format_cmdline_cbtag(S, i, CMT[2],
+                        tokenoffset(t.t) + o - 1, o)
+                }
+            }
         }
         else {
-            if (tok==t.lb) {
-                p = p + 2  // skip to first "/"
-                return(res)
+            p = tokenoffset(t.t) + o // current position in S[i]
+            // check for /// ...
+            if (_Format_cmdline_cmatch(S, i, stub, p, tok, t.lb)) {
+                lb = `TRUE'
+                if (nolb) S[i] = substr(S[i], 1, max((stub, p-5)))
+                else if (cmt) _Format_cmdline_ctag(S, i, p-4, CMT)
+                break
             }
-            if (tok==t.eol) break
+            // check for // ...
+            if (_Format_cmdline_cmatch(S, i, stub, p, tok, t.el)) {
+                el = `TRUE'
+                if (cmt) _Format_cmdline_ctag(S, i, p-3, CMT)
+                break
+            }
             res = res + tok
         }
-        p = p + strlen(tok)
     }
-    p = 0
+    if (cmt) { // close comment tag if line ends in open /*...*/
+        if (cb) S[i] = S[i] + CMT[2]
+    }
     return(res)
+}
+
+void _Format_cmdline_cbtag(`StrC' S, `Int' i, `Str' tag, `Int' p, `Int' o)
+{
+    S[i] = substr(S[i], 1, p) + tag + substr(S[i], p+1, .)
+    o = o + strlen(tag)
+}
+
+`Bool' _Format_cmdline_cmatch(`StrC' S, `Int' i, `Int' stub, `Int' p0,
+    `Str' tok, `Str' tag)
+{
+    `Int' p
+    
+    if (tok!=tag)              return(`FALSE') // no match
+    p = p0 - strlen(tag) - 1
+    if (p<=stub)               return(`TRUE') // tag is at start of line
+    if (substr(S[i],p,1)==" ") return(`TRUE') // tag is preceded by blank
+                               return(`FALSE')
+}
+
+void _Format_cmdline_ctag(`StrC' S, `Int' i, `Int' p, `StrR' CMT)
+{
+    S[i] = substr(S[i], 1, p) + CMT[1] + substr(S[i], p+1, .) + CMT[2]
 }
 
 // formatting of code log -----------------------------------------------------
@@ -3625,13 +3777,15 @@ void _Format_log_insertrows(`StrC' S, `BoolC' p, `Int' i, `Int' n)
 // apply formatting options to clog
 void _Format_clog(`Main' M, `Log' L, `StrC' S)
 {
+    `Bool' texman, nolb, cmt
+    
+    texman = !(L.O.verb==`TRUE' | L.O.notex==`TRUE')
+    nolb   = L.O.nolb==`TRUE'
+    cmt    = L.O.cmt==`TRUE' & L.O.verb!=`TRUE'
     _Format_clog_striptags(M, S)
-    if (L.O.nolb==`TRUE') _Format_clog_nolb(M, S)
-    if (L.O.verb!=`TRUE' & L.O.notex!=`TRUE') {
-        S = _Format_clog_texman(S, L.O.clsize, M.lognm)
-        if (L.O.nogt==`TRUE')    _Format_clog_nogt(S)
-        if (L.O.nolskip==`TRUE') _Format_clog_nolskip(S)
-    }
+    if (texman) S = _Format_clog_texman(S, L.O.clsize, M.lognm)
+    _Format_clog_parse(M, L, S, texman, nolb, cmt, L.O.nogt==`TRUE')
+    if (texman & L.O.nolskip==`TRUE') _Format_clog_nolskip(S)
 }
 
 // remove qui/oom/cnp tags
@@ -3651,21 +3805,6 @@ void _Format_clog_striptags(`Main' M, `StrC' S)
             else if (s==M.Ltag.cnp) p[i] = 0
         }
         S = select(S, p)
-    }
-}
-
-// remove line break comments
-void _Format_clog_nolb(`Main' M, `StrC' S)
-{
-    `Int'  i, r, lb, cb
-
-    r = rows(S)
-    if (!r) return
-    lb = cb = 0
-    for (i=1;i<=r;i++) {
-        (void) __Format_log_read_cmdline(M.t, S[i], cb, lb)
-        if (lb) S[i] = substr(S[i], 1, lb-2)
-        else if (substr(S[i],1,3)=="///") S[i] = ""
     }
 }
 
@@ -3690,16 +3829,64 @@ void _Format_clog_nolb(`Main' M, `StrC' S)
     return(Cat(fn1))
 }
 
-// remove "> " at beginning of line
-void _Format_clog_nogt(`StrC' S)
+void _Format_clog_parse(`Main' M, `Log' L, `StrC' S, `Bool' texman, `Bool' nolb,
+    `Bool' cmt, `Bool' nogt)
 {
-    `Int'  r
-    `IntC' p
+    `Bool'  inmata, iscmt, lb, el
+    `Int'   i, r, k, cb
+    `Str'   s
+    `StrR'  cmd, CMT
+    `pCode' C
     
-    r = rows(S)
-    if (!r) return
-    p = select(1::r, substr(S,1,2):=="> ")
-    if (length(p)) S[p] = "  " :+ substr(S[p], 3, .)
+    if ((r=rows(S))<1) return
+    if (cmt) CMT = ("{\"+L.O.CMT+"{", "}}")
+    else if (!(nolb | (texman & nogt))) return // nothing to do
+    C = asarray(M.C, L.ids[1])
+    inmata = C->mata==`TRUE'
+    cmd = J(1,5,"") // record up to 5 lines of command
+    for (i=1;i<=r;i++) {
+        if (S[i]==(texman ? "{\smallskip}" : "")) continue
+        k = cb = lb = el = 0
+        s = _Format_cmdline(S, i, M.t, 0, cb, lb, el, nolb, cmt, CMT)
+        iscmt = _Format_cmdiscmt(inmata, s, S, i, 0, cmt, CMT)
+        cmd[++k] = s
+        while (i<r) {
+            if (texman) {
+                if (substr(S[i+1],1,2)=="> ") {
+                    i++
+                    if (lb) { // continuation of line-break comment
+                        if (nolb) S[i] = "> "
+                        else if (cmt) _Format_cmdline_ctag(S, i, 2, CMT)
+                    }
+                    else if (el) { // continuation of end of line comment
+                        if (cmt) _Format_cmdline_ctag(S, i, 2, CMT)
+                    }
+                    else { // other type of continuation
+                        s = _Format_cmdline(S,i,M.t,2,cb,lb,el,nolb,cmt,CMT)
+                        if (!iscmt) {; if (k<5) cmd[++k] = s; }
+                        else if (cmt) _Format_cmdline_ctag(S, i, 2, CMT)
+                    }
+                    if (nogt) S[i] = substr(S[i], 3, .)
+                    continue
+                }
+            }
+            if (lb | cb) { // after line-break comment or open /*...*/
+                s = _Format_cmdline(S, ++i, M.t, 0, cb, lb, el, nolb, cmt, CMT)
+                if (!iscmt) {; if (k<5) cmd[++k] = s; }
+                else if (cmt) _Format_cmdline_ctag(S, i, 0, CMT)
+                continue
+            }
+            break
+        }
+        s = strtrim(invtokens(cmd[|1\k|],""))
+        if (!inmata) {
+            if (substr(s,1,4)=="mata") { // "mata", "mata:", or "mata<blanks>:"
+                s = substr(s,5,.)
+                if (s=="")                  inmata = `TRUE'
+                else if (strltrim(s)==":")  inmata = `TRUE'
+            }
+        }
+    }
 }
 
 // restore blank lines
@@ -3780,7 +3967,7 @@ void _Format_tag(`StrC' f, `StrM' tag)
     for (i=1; i<=k; i++) f = subinstr(f, tag[i,1], tag[i,2]+tag[i,1]+tag[i,3])
 }
 
-// add select range, apply line numbers, apply line tags
+// add line numbers, select range, apply line tags
 void _Format_lnum(`StrC' f, `Log' L, `Int' l0)
 {
     `BoolC' tag
@@ -3848,6 +4035,15 @@ void _Format_lnum_ltag(`BoolC' tag, `IntC' idx, `Log' L, `StrM' ltag)
             L.rhs[p] = L.rhs[p] :+ ltag[i,3]
         }
     }
+}
+
+void _Format_prepost(`StrC' f, `Log' L, `StrC' pre, `StrC' post)
+{
+    if (rows(pre)) {
+        if (rows(L.Lnum.p)) L.Lnum.p = L.Lnum.p :+ rows(pre)
+        f = pre \ f
+    }
+    if (rows(post)) f = f \ post
 }
 
 /*---------------------------------------------------------------------------*/
@@ -3965,7 +4161,10 @@ void Weave_L(`Main' M, `Str' s, `Int' a)
     }
     if (L->O.nobegin!=`TRUE') fwrite(M.tgt.fh, L->O.Begin)
     if (L->O.statc!=`TRUE') {
-        fwrite(M.tgt.fh, "\input{" + MkTexfn(L->O.logdir, id, ".log.tex") + "}")
+        fwrite(M.tgt.fh, "\input{" +
+            subinstr(MkTexfn(L->O.logdir, id, ".log.tex"), "-", "\-")
+            + "}")
+        //fwrite(M.tgt.fh, "\input{" + MkTexfn(L->O.logdir, id, ".log.tex") + "}")
         M.logsave = L->save = `TRUE' // need to save log on disc
     }
     else {
@@ -4130,7 +4329,7 @@ void Weave_I(`Main' M, `Str' s, `Int' a)
     s = substr(s, l+1, .)
     // add result to LaTeX file
     I = asarray(M.I, id)
-    if (!length(I)) { // no such id in database (cannot happen, can it?)
+    if (!length(I)) { // no such id in database
         fwrite(M.tgt.fh, Weave_id_err(id, "result"))
         return
     }
@@ -4363,15 +4562,20 @@ void Extract_code(`Main' M)
 // display lines of source file that caused error
 void ErrorLines(`Source' F)
 {
-    `Int' i
+    `IntC' l
+    `StrC' lnum
     
+    displayas("err")
     if (F.i0==F.i) {
-        errprintf("error on line %g in %s:\n", F.i, F.fn)
-        errprintf("    %s\n", F.S[F.i0])
+        printf("error on line %g in %s:\n", F.i, F.fn)
+        display(strofreal(F.i0) + ": " + F.S[F.i0], 1) // display asis
     }
     else {
-        errprintf("error on lines %g-%g in %s:\n", F.i0, F.i, F.fn)
-        for (i=F.i0; i<=F.i; i++) errprintf("    %s\n", F.S[i])
+        lnum = strofreal(F.i0::F.i)
+        l = strlen(lnum)
+        lnum = (max(l):-l) :* " " + lnum
+        printf("error on lines %g-%g in %s:\n", F.i0, F.i, F.fn)
+        display(lnum :+ ": " :+ F.S[|F.i0 \ F.i|], 1)  // display asis
     }
 }
 
@@ -4425,6 +4629,45 @@ void ErrorLines(`Source' F)
         n = ceil(n/26) - 1
     }
     return(res)
+}
+
+// check whether id is a valid name; behaves like st_islmname() but allows id
+// to be longer than 31 characters and to contain "." (except first character)
+// and "-"
+`Bool' _isidname(`Str' id0)
+{
+    `Str' id
+    
+    if (substr(id0,1,1)==".") return(0) // first char must not be "."
+    id = subinstr(subinstr(id0, "-", "_"), ".", "")  // allow "." and "-"
+    if (stataversion()<1400) return(__isidname(id)) // ascii
+                             return(_uisidname(id)) // unicode
+}
+`Bool' __isidname(`Str' id)
+{
+    `Int' l, i
+    
+    l = strlen(id)
+    if (l<=31) return(st_islmname(id))
+    i = 1
+    while (i<=l) {
+        if (!st_islmname(substr(id, i, 31))) return(0)
+        i = i + 31
+    }
+    return(1)
+}
+`Bool' _uisidname(`Str' id)
+{
+    `Int' l, i
+    
+    l = ustrlen(id)
+    if (l<=31) return(st_islmname(id))
+    i = 1
+    while (i<=l) {
+        if (!st_islmname(usubstr(id, i, 31))) return(0)
+        i = i + 31
+    }
+    return(1)
 }
 
 /*---------------------------------------------------------------------------*/
