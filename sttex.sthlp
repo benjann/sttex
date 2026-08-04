@@ -1045,7 +1045,7 @@
     to print comments as gray slanted text, you could include
 
             {com}\usepackage{xcolor}
-            \def\stcmt#1{\textcolor{gray}{\textsl{#1}}}}{txt}
+            \def\stcmt#1{\textcolor{gray}{\textsl{#1}}}{txt}
 
 {pmore}
     in the preamble of the document and then apply option {cmd:cmt(stcmt)}.
@@ -1341,7 +1341,7 @@
     {cmd:nosuffix}.
 
 {phang}
-    [{cmd:no}]{opt epsfig}} specifies whether to use {cmd:\epsfig{}} instead of
+    [{cmd:no}]{opt epsfig} specifies whether to use {cmd:\epsfig{}} instead of
     {cmd:\includegraphics{}} to embed the graph in the target document. Default
     is {cmd:noepsfig}.
 
