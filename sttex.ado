@@ -1,4 +1,4 @@
-*! version 1.2.1  04aug2026  Ben Jann
+*! version 1.2.2  05aug2026  Ben Jann
 
 program sttex
     version 11
@@ -7,6 +7,11 @@ program sttex
     if `"`subcmd'"'=="register" {
         gettoken subcmd 0 : 0   // strip register
         Register `macval(0)'
+        exit
+    }
+    if `"`subcmd'"'=="convert" {
+        gettoken subcmd 0 : 0   // strip convert
+        Convert `macval(0)'
         exit
     }
     if `"`subcmd'"'=="extract" {
@@ -78,6 +83,22 @@ program Extract
     Process extract `macval(0)'
 end
 
+program Convert
+    _parse comma src 0: 0
+    gettoken src rest : src
+    if `"`rest'"'!="" error 198
+    syntax [, SAVing(str) Replace ]
+    mata: AddSuffixToSourcefile(".do")
+    confirm file `"`src'"'
+    mata: PrepareFilenames(".sttex")
+    nobreak {
+        capt n break mata: Convert()
+        mata: CloseOpenFHsAndExit(`=_rc')
+    }
+    _make_displaylink `"`tgt'"' // returns local link
+    di as txt `"(target file saved as {`link':`tgt'})"'
+end
+
 program Process, rclass
     local caller : di _caller()
     // syntax
@@ -85,8 +106,17 @@ program Process, rclass
     if `"`extract'"'!="extract" local extract ""
     _parse comma args 0 : 0
     gettoken src args : args // source file
-    mata: AddSuffixToSourcefile()
+    mata: AddSuffixToSourcefile(".sttex")
     confirm file `"`src'"'
+    mata: st_local("suffix", pathsuffix(st_local("src")))
+    if `"`suffix'"'==".do" {
+        // assume source to be a do-file and convert on the fly
+        tempfile SRC
+        qui Convert `"`src'"', saving(`"`SRC'"')
+    }
+    else {
+        local SRC: copy local src
+    }
     _collect_overall_options `0'
     _collect_typeset_options, `macval(options)'
     local options0 `macval(options)'
@@ -108,7 +138,7 @@ program Process, rclass
     local typeset `typeset' `typeset2' `view' `view2'
     local typesetopts `jobname' `cleanup' `nobibtex' `bibtex' /*
         */ `nomakeindex' `makeindex'
-    mata: PrepareFilenames()
+    mata: PrepareFilenames("`extract'"!="" ? ".do" : ".tex")
     // run main routine
     if "`extract'"!="" {
         // extract stata code; do not maintain db, do not typeset
@@ -937,12 +967,12 @@ struct `CMDLINE' {
 /*---------------------------------------------------------------------------*/
 
 // add suffix to source file
-void AddSuffixToSourcefile()
+void AddSuffixToSourcefile(`Str' suf)
 {
     `Str' src
     
     src = st_local("src")
-    if (pathsuffix(src)=="") src = src + ".sttex"
+    if (pathsuffix(src)=="") src = src + suf
     st_local("src", src)
 }
 
@@ -957,7 +987,7 @@ void GetInitFromSourcefile()
     tag = "%STinit"
     EOF = J(0, 0, "")
     t = tokeninit((" "+char(9)), (","))
-    fh = FOpen(st_local("src"), "r")
+    fh = FOpen(st_local("SRC"), "r")
     for (i=1; i<=50; i++) {
         if ((line=fget(fh))==EOF) {
             FClose(fh)
@@ -975,9 +1005,8 @@ void GetInitFromSourcefile()
 }
 
 // prepare file names
-void PrepareFilenames()
+void PrepareFilenames(`Str' suf)
 {
-    `Str' suf
     `Str' src                     // path and name of source file
     `Str' srcdir; `Unset' srcdir  // path of source file (without name)
     `Str' srcnm;  `Unset' srcnm   // name of source file (without path)
@@ -989,7 +1018,6 @@ void PrepareFilenames()
     src = st_local("src")
     pathsplit(src, srcdir, srcnm)
     // target file
-    suf = st_local("extract")!="" ? ".do" : ".tex"
     tgt = st_local("saving")
     if (tgt=="")                  tgt = pathrmsuffix(srcnm) + suf
     else if (pathsuffix(tgt)=="") tgt = tgt + suf
@@ -1019,7 +1047,7 @@ void Process()
     
     // process input file
     ParseSrc(M = Initialize(),
-        ImportSrc(st_local("src"), strtoreal(st_local("StartAtLine"))))
+        ImportSrc(st_local("SRC"), strtoreal(st_local("StartAtLine"))))
     
     // truncate containers
     M.P.id  = M.P.id[|1\M.P.j|]
@@ -4873,6 +4901,117 @@ void Checkbibtex(`Str' fn)
         }
     }
     FClose(fh)
+}
+
+/*---------------------------------------------------------------------------*/
+/*  convert                                                                  */
+/*---------------------------------------------------------------------------*/
+
+void Convert()
+{
+    `Int'    fh, i, n, a, b
+    `Str'    s, btag, etag, st
+    `StrC'   S
+    `TokEnv' t
+    
+    Fexists(st_local("tgt"), st_local("replace")!="")
+    btag = "/***"; etag = "***/"; st = "//ST"
+    t = tokeninit((" "+char(9)), ",") // (to read first token of line)
+    S = Cat(st_local("src"))
+    n = rows(S)
+    fh = FOpen(st_local("tgt"), "w", "", 1)
+    a = 1; b = 0
+    for (i=1;i<=n;i++) {
+        // treat empty lines before Stata section as text
+        if (S[i]=="") {
+            if (a>b) fput(fh, "")
+            continue
+        }
+        // text section: /*** ... ***/
+        tokenset(t, S[i])
+        s = tokenget(t)
+        if (s==btag) {
+            if (strtrim(tokenrest(t))=="") {
+                _Convert_stblock(fh, S, a, b, i)
+                for (a=++i;i<=n;i++) {
+                    tokenset(t, S[i])
+                    s = tokenget(t)
+                    if (s==etag) {; if (strtrim(tokenrest(t))=="") break; }
+                }
+                _Convert_txtblock(fh, t, S, a, i)
+                continue
+            }
+        }
+        // interpreted comment: //ST...
+        if (substr(s,1,4)==st) {
+            s = substr(s,5,.)
+            // STgraph
+            if (s=="graph") {
+                _Convert_stblock(fh, S, a, b, i)
+                fput(fh, "\st" + s + _Convert_idopts(tokenrest(t)))
+                continue
+            }
+            // STinit, STpart
+            if (anyof(("init", "part"), s)) {
+                _Convert_stblock(fh, S, a, b, i)
+                fput(fh, "%ST" + s + tokenrest(t))
+                continue
+            }
+        }
+        // Stata section
+        if (a>b) a = i
+        b = i
+    }
+    _Convert_stblock(fh, S, a, b, i)
+    FClose(fh)
+}
+
+void _Convert_stblock(`Int' fh, `StrC' S, `Int' a, `Int' b, `Int' i)
+{
+    if (a>b) return
+    // Stata section
+    fput(fh, "\begin{stata}")
+    for (;a<=b;a++) fput(fh, "    " + S[a])
+    fput(fh, "\end{stata}")
+    // treat empty lines after Stata section as text
+    for (;a<i;a++) fput(fh, "")
+}
+
+void _Convert_txtblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b)
+{
+    `Int'  i, l, trim
+    
+    if (a==b) return
+    // determine size of trimming
+    trim = .
+    for (i=a;i<b;i++) {
+        tokenset(t, S[i])
+        if ((l=strlen(tokenget(t)))==0) continue // empty line
+        l = tokenoffset(t) - l - 1 // size of indentation
+        if (l<trim) trim = l
+        if (trim<1) break
+    }
+    // write lines without trimming
+    if (trim<1) {
+        for (i=a;i<b;i++) fput(fh, S[i])
+        return
+    }
+    // write lines with trimming
+    l = trim + 1
+    for (i=a;i<b;i++) fput(fh, substr(S[i], l, .))
+}
+
+`Str' _Convert_idopts(`Str' s) // "[id][, options]" => "[id]{options}"
+{
+    `Int' p
+    `Str' o
+    
+    if (p = strpos(s, ",")) {
+        o = strtrim(substr(s, p+1, .))
+        s = strtrim(substr(s, 1, p-1))
+    }
+    else s = strtrim(s)
+    return((s!="" ? "[" + s + "]" : "") + "{" + o + "}")
 }
 
 end

@@ -34,6 +34,12 @@ Installation from GitHub:
 
 Main changes:
 
+    05aug2026 (version 1.2.2)
+    - sttex can now process Stata-format source files, i.e. do-files that contain
+      LaTeX blocks as comments
+    - new command -sttex convert- translates Stata-format source files into
+      LaTeX-format source files
+
     04aug2026 (version 1.2.1)
     - new options cmt(), cbf(), and rbf() can now be used to tag comments, commands,
       and results in logs 

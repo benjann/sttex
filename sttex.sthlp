@@ -1,5 +1,5 @@
 {smcl}
-{* 04aug2026}{...}
+{* 05aug2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -38,11 +38,27 @@
     Suffix {cmd:.sttex} is assumed if {it:srcfile} is specified without
     suffix. {it:srcfile} may contain an absolute or relative path.
 
+{pmore}
+    The default is to treat {it:srcfile} as a LaTeX file that contains
+    {help sttex##tags:dynamic tags} to include Stata code and its results
+    (LaTeX-format source file). However, if the file suffix is {cmd:.do},
+    {it:srcfile} is treated as a do-file that integrates LaTeX code as comments
+    ({help sttex##dofile:Stata-format source file}).
+
 {pstd}
     Extract Stata code from source file:
 
 {p 8 15 2}
     {cmd:sttex extract} {it:srcfile}
+    [{cmd:,}
+    {opt sav:ing(tgtfile)} {opt r:eplace}
+    ]
+
+{pstd}
+    Convert source file from Stata format to LaTeX format
+
+{p 8 15 2}
+    {cmd:sttex convert} {it:srcfile}
     [{cmd:,}
     {opt sav:ing(tgtfile)} {opt r:eplace}
     ]
@@ -311,7 +327,14 @@
 
 {pstd}
     {cmd:sttex extract} is a utility command that can be used to collect all blocks
-    of Stata code from a source file and store them in a do-file.
+    of Stata code from a source file and store them in a do-file. {cmd:sttex extract}
+    assumes suffix {cmd:.sttex} if {it:srcfile} is specified without suffix.
+
+{pstd}
+    {cmd:sttex convert} is a utility command that can be used to convert a 
+    {help sttex##dofile:Stata-format source file} into a LaTeX-format source
+    file. {cmd:sttex convert} assumes suffix {cmd:.do} if {it:srcfile} is
+    specified without suffix.
 
 {pstd}
     {cmd:sttex} requires Stata 11 or newer.
@@ -851,7 +874,7 @@
     path is specified in {it:tgtfile}.
 
 {pmore}
-    For {cmd:sttex extract}, option {cmd:saving()} specifies the target dofile to
+    For {cmd:sttex extract}, option {cmd:saving()} specifies the target do-file to
     store the Stata commands. Default suffix is {cmd:.do} in this case, and {it:srcname}{cmd:.do} is used
     if {cmd:saving()} is omitted.
 
@@ -1391,6 +1414,7 @@
     {help sttex##id:Use of explicit element names}
     {help sttex##preamble:Preamble of LaTeX file}
     {help sttex##fontsize:Changing the font size of Stata logs}
+    {help sttex##dofile:Stata-format source file}
 
 {marker id}{...}
 {dlgtab:Use of explicit element names}
@@ -1464,6 +1488,95 @@
     is appropriate for a document that uses a 12-point font
     for the text body.
 
+{marker dofile}{...}
+{dlgtab:Stata-format source file}
+
+{pstd}
+    By default, {cmd:sttex} expects the source file to be a LaTeX file that contains
+    blocks of Stata code. However, {cmd:sttex} can also process a Stata do-file
+    that contains blocks of LaTeX code. In such a do-file, use syntax
+
+        {cmd:/***}
+        {it:text}
+        {cmd:***/}
+
+{pstd}
+    to add a LaTeX blocks, possibly including any of the dynamic tags described
+    above. The opening tag, {cmd:/***}, and the closing tag, {cmd:***/}, must
+    both be on separate lines. For convenience, you can type
+
+        {cmd://STgraph} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##gropts:{it:graph_options}}]
+
+{pstd}
+    in the Stata code to include a graph rather than applying {helpb sttex##graph:\stgraph{}}
+    in {it:text}. Furthermore, you can use {cmd://STinit} and {cmd://STpart}
+    in the Stata code as substituts for {helpb sttex##target:%STinit} and 
+    {helpb sttex##parts:%STpart}, respectively.
+
+{pstd}
+    Use {cmd:sttex convert} if you want to convert a Stata-format source file
+    into a LaTeX-format source file. {cmd:sttex convert} is called internally by
+    {cmd:sttex} when processing a Stata-format source file.
+
+{pstd}
+    A simple example of a Stata-format source file is as follows.
+
+        --- example.do ---
+        //STinit, gropts(center args(width=0.9\textwidth))
+        /***
+            \documentclass{article}
+            \usepackage{graphicx}
+            \usepackage{stata}
+            \begin{document}
+        
+            Open the 1978 Automobile Data and run a regression of price on mpg.
+        ***/
+        
+        sysuse auto
+        regress price mpg
+        
+        /***
+            The effect of mpg on price is \stres{_b[mpg]}. Here is a graph
+            that illustrates the relation:
+        ***/
+        
+        twoway (scatter price mpg) (lfit price mpg)
+        //STgraph
+        
+        /***
+            \end{document}
+        ***/
+        --- end of file ---
+
+{pstd}
+    {cmd:sttex convert} translates this into the following, equivalent
+    LaTeX-format source file.
+
+        --- example.sttex ---
+        %STinit, gropts(center args(width=0.9\textwidth))
+        \documentclass{article}
+        \usepackage{graphicx}
+        \usepackage{stata}
+        \begin{document}
+
+        Open the 1978 Automobile Data and run a regression of price on mpg.
+
+        \begin{stata}
+            sysuse auto
+            regress price mpg
+        \end{stata}
+
+        The effect of mpg on price is \stres{_b[mpg]}. Here is a graph
+        that illustrates the relation:
+
+        \begin{stata}
+            twoway (scatter price mpg) (lfit price mpg)
+        \end{stata}
+        \stgraph{}
+
+        \end{document}
+        --- end of file ---
+
 
 {marker example}{...}
 {title:Example}
@@ -1506,4 +1619,4 @@
 
 {psee}
     Online:  help for
-    {helpb dyndoc}, {helpb dyntext}, {helpb texdoc} (if indstalled), {helpb webdoc} (if indstalled)
+    {helpb dyndoc}, {helpb dyntext}
