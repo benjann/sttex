@@ -1,5 +1,5 @@
 {smcl}
-{* 05aug2026}{...}
+{* 06aug2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -40,7 +40,7 @@
 
 {pmore}
     The default is to treat {it:srcfile} as a LaTeX file that contains
-    {help sttex##tags:dynamic tags} to include Stata code and its results
+    {help sttex##tags:dynamic tags} to include Stata commands and their results
     (LaTeX-format source file). However, if the file suffix is {cmd:.do},
     {it:srcfile} is treated as a do-file that integrates LaTeX code as comments
     ({help sttex##dofile:Stata-format source file}).
@@ -331,7 +331,7 @@
     assumes suffix {cmd:.sttex} if {it:srcfile} is specified without suffix.
 
 {pstd}
-    {cmd:sttex convert} is a utility command that can be used to convert a 
+    {cmd:sttex convert} is a utility command that can be used to convert a
     {help sttex##dofile:Stata-format source file} into a LaTeX-format source
     file. {cmd:sttex convert} assumes suffix {cmd:.do} if {it:srcfile} is
     specified without suffix.
@@ -1190,7 +1190,7 @@
 
 {pmore}
     in the preamble of the document to use a typewriter font that supports
-    bold text. 
+    bold text.
 
 {phang}
     [{cmd:no}]{opt rbf}[{cmd:(}{it:tag}{cmd:)}] specifies whether to tag
@@ -1198,7 +1198,7 @@
     is {cmd:norbf}. Type {cmd:rbf} to tag results using
     {cmd:{c -(}\bftt{c -(}}{it:...}{cmd:{c )-}{c )-}}; type
     {cmd:rbf(}{it:tag}{cmd:)} to tag results using
-    {cmd:{c -(}\}{it:tag}{cmd:{c -(}}{it:...}{cmd:{c )-}{c )-}}. 
+    {cmd:{c -(}\}{it:tag}{cmd:{c -(}}{it:...}{cmd:{c )-}{c )-}}.
 
 {phang}
     [{cmd:no}]{opt commands} specifies whether to remove all command lines from the
@@ -1432,7 +1432,7 @@
     defining the elements. In this case, changes in order etc. will not change the
     names, and hence will not lead to unnecessary reevaluation of Stata commands. Using
     explicit names will also be helpful if you want to reference specific elements
-    in {helpb sttex##parts:%STpart}, {helpb sttex##inlexp:\stres{}}, or 
+    in {helpb sttex##parts:%STpart}, {helpb sttex##inlexp:\stres{}}, or
     {helpb sttex##stlog:\stlog{}}.
 
 {pstd}
@@ -1501,25 +1501,36 @@
         {cmd:***/}
 
 {pstd}
-    to add a LaTeX blocks, possibly including any of the dynamic tags described
-    above. The opening tag, {cmd:/***}, and the closing tag, {cmd:***/}, must
-    both be on separate lines. For convenience, you can type
+    to add a LaTeX block (possibly including any of the dynamic tags described
+    above). The opening tag, {cmd:/***}, and the closing tag, {cmd:***/}, must
+    both be on individual lines. Blocks of Stata code are formed implicitly by
+    the commands outside of such LaTeX blocks. Alternatively, you can start a
+    Stata block explicitly by typing
+
+        {cmd://STdo} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##doopts:{it:do_options}}]
+    or
+        {cmd://STdo*} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##doopts:{it:do_options}}]
+
+{pstd}
+    This is useful if you want to apply custom options to a block;
+    {cmd://STdo*} creates a quiet block that will not be echoed in the final
+    document. Furthermore, for convenience, you can type
 
         {cmd://STgraph} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##gropts:{it:graph_options}}]
 
 {pstd}
-    in the Stata code to include a graph rather than applying {helpb sttex##graph:\stgraph{}}
-    in {it:text}. Furthermore, you can use {cmd://STinit} and {cmd://STpart}
-    in the Stata code as substituts for {helpb sttex##target:%STinit} and 
+    to include a graph (rather than applying {helpb sttex##graph:\stgraph{}}
+    in {it:text}), and you can use {cmd://STinit} and {cmd://STpart}
+    as substitutes for {helpb sttex##target:%STinit} and
     {helpb sttex##parts:%STpart}, respectively.
 
 {pstd}
     Use {cmd:sttex convert} if you want to convert a Stata-format source file
-    into a LaTeX-format source file. {cmd:sttex convert} is called internally by
-    {cmd:sttex} when processing a Stata-format source file.
+    into a LaTeX-format source file. {cmd:sttex convert} is called on the fly by
+    {cmd:sttex} when processing a source file with suffix {cmd:.do}.
 
 {pstd}
-    A simple example of a Stata-format source file is as follows.
+    A simple example for a Stata-format source file is as follows.
 
         --- example.do ---
         //STinit, gropts(center args(width=0.9\textwidth))
@@ -1528,29 +1539,30 @@
             \usepackage{graphicx}
             \usepackage{stata}
             \begin{document}
-        
+
             Open the 1978 Automobile Data and run a regression of price on mpg.
         ***/
-        
+
         sysuse auto
         regress price mpg
-        
+
         /***
             The effect of mpg on price is \stres{_b[mpg]}. Here is a graph
             that illustrates the relation:
         ***/
-        
+
+        //STdo*
         twoway (scatter price mpg) (lfit price mpg)
         //STgraph
-        
+
         /***
             \end{document}
         ***/
         --- end of file ---
 
 {pstd}
-    {cmd:sttex convert} translates this into the following, equivalent
-    LaTeX-format source file.
+    {cmd:sttex convert} translates this into the following LaTeX-format source
+    file.
 
         --- example.sttex ---
         %STinit, gropts(center args(width=0.9\textwidth))
@@ -1569,9 +1581,9 @@
         The effect of mpg on price is \stres{_b[mpg]}. Here is a graph
         that illustrates the relation:
 
-        \begin{stata}
+        \begin{stata*}
             twoway (scatter price mpg) (lfit price mpg)
-        \end{stata}
+        \end{stata*}
         \stgraph{}
 
         \end{document}

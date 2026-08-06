@@ -1,4 +1,4 @@
-*! version 1.2.2  05aug2026  Ben Jann
+*! version 1.2.3  06aug2026  Ben Jann
 
 program sttex
     version 11
@@ -4909,6 +4909,7 @@ void Checkbibtex(`Str' fn)
 
 void Convert()
 {
+    `Bool'   stdo
     `Int'    fh, i, n, a, b
     `Str'    s, btag, etag, st
     `StrC'   S
@@ -4920,7 +4921,7 @@ void Convert()
     S = Cat(st_local("src"))
     n = rows(S)
     fh = FOpen(st_local("tgt"), "w", "", 1)
-    a = 1; b = 0
+    a = 1; b = 0; stdo = `FALSE'
     for (i=1;i<=n;i++) {
         // treat empty lines before Stata section as text
         if (S[i]=="") {
@@ -4932,7 +4933,7 @@ void Convert()
         s = tokenget(t)
         if (s==btag) {
             if (strtrim(tokenrest(t))=="") {
-                _Convert_stblock(fh, S, a, b, i)
+                _Convert_stblock(fh, t, S, a, b, i, stdo)
                 for (a=++i;i<=n;i++) {
                     tokenset(t, S[i])
                     s = tokenget(t)
@@ -4947,32 +4948,56 @@ void Convert()
             s = substr(s,5,.)
             // STgraph
             if (s=="graph") {
-                _Convert_stblock(fh, S, a, b, i)
-                fput(fh, "\st" + s + _Convert_idopts(tokenrest(t)))
+                s = "\st" + s + _Convert_idopts(0, tokenrest(t))
+                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                fput(fh, s)
                 continue
             }
             // STinit, STpart
             if (anyof(("init", "part"), s)) {
-                _Convert_stblock(fh, S, a, b, i)
-                fput(fh, "%ST" + s + tokenrest(t))
+                s = "%ST" + s + tokenrest(t)
+                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                fput(fh, s)
+                continue
+            }
+            // STdo (new Stata section with instructions)
+            if (anyof(("do", "do*"), s)) {
+                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                stdo = `TRUE' // 1st line contains instruction
+                a = b = i
                 continue
             }
         }
-        // Stata section
+        // new Stata section (without instructions)
         if (a>b) a = i
+        // line contains Stata code
         b = i
     }
-    _Convert_stblock(fh, S, a, b, i)
+    _Convert_stblock(fh, t, S, a, b, i, stdo)
     FClose(fh)
 }
 
-void _Convert_stblock(`Int' fh, `StrC' S, `Int' a, `Int' b, `Int' i)
+void _Convert_stblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b,
+    `Int' i, `Bool' stdo)
 {
+    `Str' kw, s
+    
+    // exit if no Stata section
     if (a>b) return
-    // Stata section
-    fput(fh, "\begin{stata}")
+    // read instructions on 1st line
+    kw = "stata"
+    if (stdo) {
+        tokenset(t, S[a])
+        s = tokenget(t)
+        if (s=="//STdo*") kw = "stata*" // quiet
+        s = _Convert_idopts(1, tokenrest(t))
+        stdo = `FALSE' // reset
+        a++ // skip 1st line
+    }
+    // process Stata section (unless empty)
+    fput(fh, "\begin{"+kw+"}"+s)
     for (;a<=b;a++) fput(fh, "    " + S[a])
-    fput(fh, "\end{stata}")
+    fput(fh, "\end{"+kw+"}")
     // treat empty lines after Stata section as text
     for (;a<i;a++) fput(fh, "")
 }
@@ -5001,17 +5026,32 @@ void _Convert_txtblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b)
     for (i=a;i<b;i++) fput(fh, substr(S[i], l, .))
 }
 
-`Str' _Convert_idopts(`Str' s) // "[id][, options]" => "[id]{options}"
-{
+`Str' _Convert_idopts(`Int' style, `Str' s)
+{    
     `Int' p
-    `Str' o
+    `Str' id, opts
     
+    // parse [id][, options]
     if (p = strpos(s, ",")) {
-        o = strtrim(substr(s, p+1, .))
-        s = strtrim(substr(s, 1, p-1))
+        id   = strtrim(substr(s, 1, p-1))
+        opts = strtrim(substr(s, p+1, .))
     }
-    else s = strtrim(s)
-    return((s!="" ? "[" + s + "]" : "") + "{" + o + "}")
+    else id = strtrim(s)
+    // return
+    if (style==1) { // [id][options]
+        if (opts!="") {
+            id   = "[" + id + "]"
+            opts = "[" + opts + "]"
+        }
+        else if (id!="") {
+            id = "[" + id + "]"
+        }
+    }
+    else { // [id]{options}
+        if (id!="") id = "[" + id + "]"
+        opts = "{" + opts + "}"
+    }
+    return(id + opts)
 }
 
 end
