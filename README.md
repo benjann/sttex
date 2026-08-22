@@ -34,6 +34,10 @@ Installation from GitHub:
 
 Main changes:
 
+    22aug2026 (version 1.2.4)
+    - -sttex convert- has been renamed to -sttex recast-
+    - "\stres{{grname}}" did not work; this is fixed
+
     06aug2026 (version 1.2.3)
     - tag "//STdo" can now be used in a Stata-format source file to apply custom
       options to a block of Stata code; tag "//STdo*" creates a quiet block

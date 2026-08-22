@@ -1,5 +1,5 @@
 {smcl}
-{* 06aug2026}{...}
+{* 22aug2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -58,7 +58,7 @@
     Convert source file from Stata format to LaTeX format
 
 {p 8 15 2}
-    {cmd:sttex convert} {it:srcfile}
+    {cmd:sttex recast} {it:srcfile}
     [{cmd:,}
     {opt sav:ing(tgtfile)} {opt r:eplace}
     ]
@@ -331,9 +331,9 @@
     assumes suffix {cmd:.sttex} if {it:srcfile} is specified without suffix.
 
 {pstd}
-    {cmd:sttex convert} is a utility command that can be used to convert a
+    {cmd:sttex recast} is a utility command that can be used to convert a
     {help sttex##dofile:Stata-format source file} into a LaTeX-format source
-    file. {cmd:sttex convert} assumes suffix {cmd:.do} if {it:srcfile} is
+    file. {cmd:sttex recast} assumes suffix {cmd:.do} if {it:srcfile} is
     specified without suffix.
 
 {pstd}
@@ -1502,10 +1502,11 @@
 
 {pstd}
     to add a LaTeX block (possibly including any of the dynamic tags described
-    above). The opening tag, {cmd:/***}, and the closing tag, {cmd:***/}, must
-    both be on individual lines. Blocks of Stata code are formed implicitly by
-    the commands outside of such LaTeX blocks. Alternatively, you can start a
-    Stata block explicitly by typing
+    above; indentation will be removed from {it:text}). The opening tag,
+    {cmd:/***}, and the closing tag, {cmd:***/}, must both be on individual
+    lines. Blocks of Stata code are formed implicitly by the commands outside
+    of such LaTeX blocks. Alternatively, you can start a Stata block explicitly
+    by typing
 
         {cmd://STdo} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##doopts:{it:do_options}}]
     or
@@ -1525,8 +1526,8 @@
     {helpb sttex##parts:%STpart}, respectively.
 
 {pstd}
-    Use {cmd:sttex convert} if you want to convert a Stata-format source file
-    into a LaTeX-format source file. {cmd:sttex convert} is called on the fly by
+    Use {cmd:sttex recast} if you want to convert a Stata-format source file
+    into a LaTeX-format source file. {cmd:sttex recast} is called on the fly by
     {cmd:sttex} when processing a source file with suffix {cmd:.do}.
 
 {pstd}
@@ -1561,7 +1562,7 @@
         --- end of file ---
 
 {pstd}
-    {cmd:sttex convert} translates this into the following LaTeX-format source
+    {cmd:sttex recast} translates this into the following LaTeX-format source
     file.
 
         --- example.sttex ---

@@ -1,4 +1,4 @@
-*! version 1.2.3  06aug2026  Ben Jann
+*! version 1.2.4  22aug2026  Ben Jann
 
 program sttex
     version 11
@@ -9,9 +9,9 @@ program sttex
         Register `macval(0)'
         exit
     }
-    if `"`subcmd'"'=="convert" {
-        gettoken subcmd 0 : 0   // strip convert
-        Convert `macval(0)'
+    if `"`subcmd'"'=="recast" {
+        gettoken subcmd 0 : 0   // strip recast
+        Recast `macval(0)'
         exit
     }
     if `"`subcmd'"'=="extract" {
@@ -83,7 +83,7 @@ program Extract
     Process extract `macval(0)'
 end
 
-program Convert
+program Recast
     _parse comma src 0: 0
     gettoken src rest : src
     if `"`rest'"'!="" error 198
@@ -92,7 +92,7 @@ program Convert
     confirm file `"`src'"'
     mata: PrepareFilenames(".sttex")
     nobreak {
-        capt n break mata: Convert()
+        capt n break mata: Recast()
         mata: CloseOpenFHsAndExit(`=_rc')
     }
     _make_displaylink `"`tgt'"' // returns local link
@@ -112,7 +112,7 @@ program Process, rclass
     if `"`suffix'"'==".do" {
         // assume source to be a do-file and convert on the fly
         tempfile SRC
-        qui Convert `"`src'"', saving(`"`SRC'"')
+        qui Recast `"`src'"', saving(`"`SRC'"')
     }
     else {
         local SRC: copy local src
@@ -4251,7 +4251,7 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
         s = substr(s, a+l, .)
         return
     }
-    // check whether whether \stres{{graphname}}
+    // check whether whether \stres{{grname}}
     fnonly = substr(s,a+l,1)=="?"
     if (fnonly) {
         l++
@@ -4269,8 +4269,8 @@ void Weave_G(`Main' M, `Str' s, `Int' a)
         fwrite(M.tgt.fh, Weave_id_err(id, "graph"))
         return
     }
-    if (fnonly) { // if \stres{{graphname}}: add filename only (without suffix)
-        fwrite(M.tex.fh, MkTexfn(G->O.dir, id))
+    if (fnonly) { // if \stres{{grname}}: add filename only (without suffix)
+        fwrite(M.tgt.fh, MkTexfn(G->O.dir, id))
         return
     }
     if (G->O.center==`TRUE') fwrite(M.tgt.fh, "\begin{center}")
@@ -4904,10 +4904,10 @@ void Checkbibtex(`Str' fn)
 }
 
 /*---------------------------------------------------------------------------*/
-/*  convert                                                                  */
+/*  recast                                                                   */
 /*---------------------------------------------------------------------------*/
 
-void Convert()
+void Recast()
 {
     `Bool'   stdo
     `Int'    fh, i, n, a, b
@@ -4933,13 +4933,13 @@ void Convert()
         s = tokenget(t)
         if (s==btag) {
             if (strtrim(tokenrest(t))=="") {
-                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                _Recast_stblock(fh, t, S, a, b, i, stdo)
                 for (a=++i;i<=n;i++) {
                     tokenset(t, S[i])
                     s = tokenget(t)
                     if (s==etag) {; if (strtrim(tokenrest(t))=="") break; }
                 }
-                _Convert_txtblock(fh, t, S, a, i)
+                _Recast_txtblock(fh, t, S, a, i)
                 continue
             }
         }
@@ -4948,21 +4948,21 @@ void Convert()
             s = substr(s,5,.)
             // STgraph
             if (s=="graph") {
-                s = "\st" + s + _Convert_idopts(0, tokenrest(t))
-                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                s = "\st" + s + _Recast_idopts(0, tokenrest(t))
+                _Recast_stblock(fh, t, S, a, b, i, stdo)
                 fput(fh, s)
                 continue
             }
             // STinit, STpart
             if (anyof(("init", "part"), s)) {
                 s = "%ST" + s + tokenrest(t)
-                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                _Recast_stblock(fh, t, S, a, b, i, stdo)
                 fput(fh, s)
                 continue
             }
             // STdo (new Stata section with instructions)
             if (anyof(("do", "do*"), s)) {
-                _Convert_stblock(fh, t, S, a, b, i, stdo)
+                _Recast_stblock(fh, t, S, a, b, i, stdo)
                 stdo = `TRUE' // 1st line contains instruction
                 a = b = i
                 continue
@@ -4973,11 +4973,11 @@ void Convert()
         // line contains Stata code
         b = i
     }
-    _Convert_stblock(fh, t, S, a, b, i, stdo)
+    _Recast_stblock(fh, t, S, a, b, i, stdo)
     FClose(fh)
 }
 
-void _Convert_stblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b,
+void _Recast_stblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b,
     `Int' i, `Bool' stdo)
 {
     `Str' kw, s
@@ -4990,7 +4990,7 @@ void _Convert_stblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b,
         tokenset(t, S[a])
         s = tokenget(t)
         if (s=="//STdo*") kw = "stata*" // quiet
-        s = _Convert_idopts(1, tokenrest(t))
+        s = _Recast_idopts(1, tokenrest(t))
         stdo = `FALSE' // reset
         a++ // skip 1st line
     }
@@ -5002,12 +5002,12 @@ void _Convert_stblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b,
     for (;a<i;a++) fput(fh, "")
 }
 
-void _Convert_txtblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b)
+void _Recast_txtblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b)
 {
     `Int'  i, l, trim
     
     if (a==b) return
-    // determine size of trimming
+    // determine size of indentation
     trim = .
     for (i=a;i<b;i++) {
         tokenset(t, S[i])
@@ -5026,7 +5026,7 @@ void _Convert_txtblock(`Int' fh, `TokEnv' t, `StrC' S, `Int' a, `Int' b)
     for (i=a;i<b;i++) fput(fh, substr(S[i], l, .))
 }
 
-`Str' _Convert_idopts(`Int' style, `Str' s)
+`Str' _Recast_idopts(`Int' style, `Str' s)
 {    
     `Int' p
     `Str' id, opts
