@@ -34,6 +34,9 @@ Installation from GitHub:
 
 Main changes:
 
+    25aug2026 (version 1.2.5)
+    - renamed -sttex recast- to -sttex invert-
+
     22aug2026 (version 1.2.4)
     - -sttex convert- has been renamed to -sttex recast-
     - "\stres{{grname}}" did not work; this is fixed

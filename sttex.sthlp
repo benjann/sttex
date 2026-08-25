@@ -1,5 +1,5 @@
 {smcl}
-{* 22aug2026}{...}
+{* 25aug2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -58,7 +58,7 @@
     Convert source file from Stata format to LaTeX format
 
 {p 8 15 2}
-    {cmd:sttex recast} {it:srcfile}
+    {cmd:sttex invert} {it:srcfile}
     [{cmd:,}
     {opt sav:ing(tgtfile)} {opt r:eplace}
     ]
@@ -331,9 +331,9 @@
     assumes suffix {cmd:.sttex} if {it:srcfile} is specified without suffix.
 
 {pstd}
-    {cmd:sttex recast} is a utility command that can be used to convert a
+    {cmd:sttex invert} is a utility command that can be used to convert a
     {help sttex##dofile:Stata-format source file} into a LaTeX-format source
-    file. {cmd:sttex recast} assumes suffix {cmd:.do} if {it:srcfile} is
+    file. {cmd:sttex invert} assumes suffix {cmd:.do} if {it:srcfile} is
     specified without suffix.
 
 {pstd}
@@ -1502,11 +1502,10 @@
 
 {pstd}
     to add a LaTeX block (possibly including any of the dynamic tags described
-    above; indentation will be removed from {it:text}). The opening tag,
-    {cmd:/***}, and the closing tag, {cmd:***/}, must both be on individual
-    lines. Blocks of Stata code are formed implicitly by the commands outside
-    of such LaTeX blocks. Alternatively, you can start a Stata block explicitly
-    by typing
+    above). The opening tag, {cmd:/***}, and the closing tag, {cmd:***/}, must
+    both be on individual lines. Blocks of Stata code are formed implicitly by
+    the commands outside of such LaTeX blocks. Alternatively, you can start a
+    Stata block explicitly by typing
 
         {cmd://STdo} [{help sttex##id:{it:id}}] [{cmd:,} {help sttex##doopts:{it:do_options}}]
     or
@@ -1526,8 +1525,8 @@
     {helpb sttex##parts:%STpart}, respectively.
 
 {pstd}
-    Use {cmd:sttex recast} if you want to convert a Stata-format source file
-    into a LaTeX-format source file. {cmd:sttex recast} is called on the fly by
+    Use {cmd:sttex invert} if you want to convert a Stata-format source file
+    into a LaTeX-format source file. {cmd:sttex invert} is called on the fly by
     {cmd:sttex} when processing a source file with suffix {cmd:.do}.
 
 {pstd}
@@ -1562,7 +1561,7 @@
         --- end of file ---
 
 {pstd}
-    {cmd:sttex recast} translates this into the following LaTeX-format source
+    {cmd:sttex invert} translates this into the following LaTeX-format source
     file.
 
         --- example.sttex ---
@@ -1589,6 +1588,12 @@
 
         \end{document}
         --- end of file ---
+
+{pstd}
+     Note that {cmd:sttex invert} removes indentation in LaTeX blocks, that is,
+     {it:k} characters are removed from the start of each line in a block,
+     where {it:k} is the minimum number of characters by which the lines
+     in the block are indented (ignoring empty lines).
 
 
 {marker example}{...}
