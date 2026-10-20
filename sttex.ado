@@ -1,4 +1,4 @@
-*! version 1.2.5  25aug2026  Ben Jann
+*! version 1.2.6  20oct2026  Ben Jann
 
 program sttex
     version 11
@@ -1383,9 +1383,9 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     _collect_onoff_option("noend"     , O.noend)
     _collect_onoff_option("beamer"    , O.beamer)
     // scalar options (. if not specified)
-    if (st_local("clsize")!="")     O.clsize = strtoreal(st_local("clsize"))
-    if (st_local("scale")!="")      O.scale = strtoreal(st_local("scale"))
-    if (st_local("blstretch")!="")  O.blstretch = strtoreal(st_local("blstretch"))
+    if (st_local("clsize")!="")    O.clsize = strtoreal(st_local("clsize"))
+    if (st_local("scale")!="")     O.scale = strtoreal(st_local("scale"))
+    if (st_local("blstretch")!="") O.blstretch = strtoreal(st_local("blstretch"))
     // multivalued numeric option (J(1,0,.) if not specified)
     if (st_local("range")!="")  O.range = strtoreal(tokens(st_local("range")))
     if (st_local("drop")!="")   O.drop  = strtoreal(tokens(st_local("drop")))
@@ -1394,19 +1394,26 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
     if (st_local("oom")!="")    O.oom   = strtoreal(tokens(st_local("oom")))
     // suffix for line numbers: set to empty string if specified as ""
     if (st_local("haslsuffix")!="") O.lsuffix = st_local("lnumbers2")
-    // string options ("" if not specified)
-    if (st_local("cmt2")!="")   O.CMT    = st_local("cmt2")
-    else if (O.cmt==`TRUE')     O.CMT    = "textsl"
-    if (st_local("rbf2")!="")   O.RBF    = st_local("rbf2")
-    else if (O.rbf==`TRUE')     O.RBF    = "bftt"
-    if (st_local("cbf2")!="")   O.CBF    = st_local("cbf2")
-    else if (O.cbf==`TRUE')     O.CBF    = "bftt"
-    if (st_local("begin2")!="") O.Begin  = st_local("begin2")
-    if (st_local("end2")!="")   O.End    = st_local("end2")
+    // optional string arguments: set to default if not specified
+    if (O.cmt==`TRUE') {
+        if (st_local("cmt2")!="") O.CMT = st_local("cmt2")
+        else if (O.CMT=="")       O.CMT = "textsl"
+    }
+    if (O.rbf==`TRUE') {
+        if (st_local("rbf2")!="") O.RBF = st_local("rbf2")
+        else if (O.RBF=="")       O.RBF = "bftt"
+    }
+    if (O.cbf==`TRUE') {
+        if (st_local("cbf2")!="") O.CBF = st_local("cbf2")
+        else if (O.CBF=="")       O.CBF = "bftt"
+    }
+    // string options: "" if not specified)
+    if (st_local("begin2")!="") O.Begin = st_local("begin2")
+    if (st_local("end2")!="")   O.End   = st_local("end2")
     // multivalued string options (J(1,0,"") if not specified)
-    if (st_local("pre")!="")    O.pre    = tokens(st_local("pre"))'
-    if (st_local("post")!="")   O.post   = tokens(st_local("post"))'
-    if (st_local("alert")!="")  O.alert  = tokens(st_local("alert"))'
+    if (st_local("pre")!="")    O.pre   = tokens(st_local("pre"))'
+    if (st_local("post")!="")   O.post  = tokens(st_local("post"))'
+    if (st_local("alert")!="")  O.alert = tokens(st_local("alert"))'
     // dictionary string options (J(0,0,"") if not specified)
     if (st_local("ltag")!="") O.ltag =
         _parse_ltag_option(st_local("ltag"), F, init)

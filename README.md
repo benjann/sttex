@@ -34,6 +34,10 @@ Installation from GitHub:
 
 Main changes:
 
+    20oct2026 (version 1.2.6)
+    - arguments in cmt(), cbf(), rbf() did not always work as expected; this is
+      fixed
+
     25aug2026 (version 1.2.5)
     - renamed -sttex recast- to -sttex invert-
 
