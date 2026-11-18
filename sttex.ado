@@ -3974,7 +3974,7 @@ void _Format_CF(`Main' M, `Str' id)
             if (range[2]>r) range[2] = r
             S = S[|range'|]
         }
-        //else S = J(0,1,"") // no line selected
+        else S = J(0,1,"") // no line selected
     }
     _Format_subst(S, CF->O.subst)
     // check whether edited file needs to be saved
