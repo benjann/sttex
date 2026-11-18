@@ -1,4 +1,4 @@
-*! version 1.2.6  20oct2026  Ben Jann
+*! version 1.2.7  18nov2026  Ben Jann
 
 program sttex
     version 11
@@ -267,7 +267,7 @@ program _collect_log_options
         local noopts `noopts' NO`o'
     }
     syntax [, `noopts' `opts' ///
-        range(numlist int max=2 >=0 missingok ascending) ///
+        range(numlist int max=2 missingok) ///
         pre(str asis) post(str asis) ///
         ltag(str asis) ///
         tag(str asis) ///
@@ -364,7 +364,7 @@ program _collect_cfile_options
         local noopts `noopts' NO`o'
     }
     syntax [, `noopts' `opts' ///
-        range(numlist int max=2 >=0 missingok ascending) ///
+        range(numlist int max=2 missingok) ///
         SUBStitute(str asis) ]
     _collect_parse_range `range'
     foreach o of local opts {
@@ -1399,14 +1399,17 @@ void _collect_log_options(`Lopt' O, `Str' opts, `Source' F, | `Bool' init)
         if (st_local("cmt2")!="") O.CMT = st_local("cmt2")
         else if (O.CMT=="")       O.CMT = "textsl"
     }
+    else if (O.cmt==`FALSE')      O.CMT = ""
     if (O.rbf==`TRUE') {
         if (st_local("rbf2")!="") O.RBF = st_local("rbf2")
         else if (O.RBF=="")       O.RBF = "bftt"
     }
+    else if (O.rbf==`FALSE')      O.RBF = ""
     if (O.cbf==`TRUE') {
         if (st_local("cbf2")!="") O.CBF = st_local("cbf2")
         else if (O.CBF=="")       O.CBF = "bftt"
     }
+    else if (O.cbf==`FALSE')      O.CBF = ""
     // string options: "" if not specified)
     if (st_local("begin2")!="") O.Begin = st_local("begin2")
     if (st_local("end2")!="")   O.End   = st_local("end2")
@@ -2315,7 +2318,7 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
             else if  (L->O.drop!=O.drop)                         chflag = `TRUE'
             else if  (L->O.cnp!=O.cnp)                           chflag = `TRUE'
             else if ((L->O.cmt==`TRUE')!=(O.cmt==`TRUE'))        chflag = `TRUE'
-            else if (L->O.CMT!=O.CMT)                            chflag = `TRUE'
+            else if  (L->O.CMT!=O.CMT)                           chflag = `TRUE'
             else if ((L->O.lnumbers==`TRUE')!=
                         (O.lnumbers==`TRUE'))                    chflag = `TRUE'
             else if (O.lnumbers==`TRUE') {
@@ -2334,9 +2337,9 @@ void _Parse_L_store(`Main' M, `StrC' ids, `Lopt' O, `Str' key)
             }
             else {
                 if      ((L->O.rbf==`TRUE')!=(O.rbf==`TRUE'))    chflag = `TRUE'
-                else if (L->O.RBF!=O.RBF)                        chflag = `TRUE'
+                else if  (L->O.RBF!=O.RBF)                       chflag = `TRUE'
                 else if ((L->O.cbf==`TRUE')!=(O.cbf==`TRUE'))    chflag = `TRUE'
-                else if (L->O.CBF!=O.CBF)                        chflag = `TRUE'
+                else if  (L->O.CBF!=O.CBF)                       chflag = `TRUE'
                 else if ((L->O.nocommands==`TRUE')!=
                             (O.nocommands==`TRUE'))              chflag = `TRUE'
                 else if ((L->O.noprompt==`TRUE')!=
@@ -3943,6 +3946,7 @@ void _Format_CF(`Main' M, `Str' id)
 {
     `pCFile' CF
     `StrC'   S
+    `Int'    r
     `IntR'   range
 
     // initialize
@@ -3961,8 +3965,16 @@ void _Format_CF(`Main' M, `Str' id)
     S = *CF->S0
     range = CF->O.range
     if (cols(range)) {
-        range[2] = min((range[2], rows(S)))
-        if (range[1]<=rows(S)) S = S[|range'|]
+        r = rows(S)
+        if (range[1]<0) range[1] = r + range[1] + 1
+        if (range[2]<0) range[2] = r + range[2] + 1
+        if (range[1]>range[2]) range = range[(2,1)]
+        if (range[1]<=r) {
+            if (range[1]<1) range[1] = 1
+            if (range[2]>r) range[2] = r
+            S = S[|range'|]
+        }
+        //else S = J(0,1,"") // no line selected
     }
     _Format_subst(S, CF->O.subst)
     // check whether edited file needs to be saved
@@ -4025,11 +4037,19 @@ void _Format_lnum(`StrC' f, `Log' L, `Int' l0)
     if (rows(L.O.ltag)) _Format_lnum_ltag(tag, idx, L, L.O.ltag)
 }
 
-void _Format_lnum_range(`StrC' f, `BoolC' tag, `IntC' idx, `IntR' range)
+void _Format_lnum_range(`StrC' f, `BoolC' tag, `IntC' idx, `IntR' range0)
 {
-    `IntC'  p
+    `Int'  r, max
+    `IntR' range
+    `IntC' p
     
-    p   = select(1::rows(idx), idx:>=range[1] :& idx:<=range[2])
+    r     = rows(idx)
+    max   = idx[r]
+    range = range0
+    if (range[1]<0) range[1] = max + range[1] + 1
+    if (range[2]<0) range[2] = max + range[2] + 1
+    if (range[1]>range[2]) range = range[(2,1)]
+    p   = select(1::r, idx:>=range[1] :& idx:<=range[2])
     f   = f[p]
     tag = tag[p]
     idx = idx[p]

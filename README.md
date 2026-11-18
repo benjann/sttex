@@ -34,6 +34,10 @@ Installation from GitHub:
 
 Main changes:
 
+    18nov2026 (version 1.2.7)
+    - negative values in range() are now allowed; they are interpreted as line
+      numbers from the end
+
     20oct2026 (version 1.2.6)
     - arguments in cmt(), cbf(), rbf() did not always work as expected; this is
       fixed

@@ -1,5 +1,5 @@
 {smcl}
-{* 25aug2026}{...}
+{* 18nov2026}{...}
 {hi:help sttex}{...}
 {right:{browse "http://github.com/benjann/sttex/"}}
 {hline}
@@ -1079,9 +1079,11 @@
 
 {phang}
     {opt range(from [to])} selects a specified range of the log, where {it:from}
-    is the first line number and {it:to} is the last line number to be included. To
-    include all remaining lines after {it:from}, you may omit {it:to} or specify
-    {it:to} as {cmd:.} (missing). {cmd:range()} is applied after options
+    is the first line number and {it:to} is the last line number to be
+    included. Positive values refer to line numbers from the start and negative
+    values refer to line numbers from the end. To include all remaining lines
+    after {it:from}, you may omit {it:to} or specify {it:to} as {cmd:.}
+    (missing) or as {cmd:-1}. {cmd:range()} is applied after options
     {cmd:drop()}, {cmd:qui()}, and {cmd:oom()} have taken effect.
 
 {phang}
@@ -1374,10 +1376,12 @@
 {dlgtab:Main}
 
 {phang}
-    {opt range(from [to])} selects a specified range of the file, where {it:from}
-    is the first line number and {it:to} is the last line number to be included. To
-    include all remaining lines after {it:from}, you may omit {it:to} or specify
-    {it:to} as {cmd:.} (missing).
+    {opt range(from [to])} selects a specified range of the file, where
+    {it:from} is the first line number and {it:to} is the last line number to
+    be included. Positive values refer to line numbers from the start and
+    negative values refer to line numbers from the end. To include all
+    remaining lines after {it:from}, you may omit {it:to} or specify {it:to} as
+    {cmd:.} (missing) or as {cmd:-1}.
 
 {phang}
     {opt substitute(matchlist)} applies string substitutions. The syntax of
